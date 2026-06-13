@@ -1,0 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&display=swap');
+
+.font-claude {
+  font-family: 'Manrope', sans-serif;
+}
+@keyframes blinkCursor {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.typing-cursor {
+  animation: blinkCursor 1s infinite;
+}
+/* ── Problem panel font overrides app.csx code ── */
+.problem-panel { font-size: 14px; }
+.problem-panel p { font-size: 14px !important; line-height: 1.85 !important; color: inherit; }
+.problem-panel pre { font-size: 13px !important; line-height: 1.7 !important; }
+.problem-panel span { font-size: inherit; }
+.problem-panel h2 { font-size: 17px !important; font-weight: 700 !important; line-height: 1.3 !important; }
+.problem-panel li span { font-size: 13px !important; }
+.problem-panel .section-label { font-size: 10px !important; letter-spacing: 0.14em; }
+
+/* ── Editor panel overrides ── */
+.btn { font-size: 14px !important; }
+.panel-header .label { font-size: 13px !important; }
+.tc-chip { font-size: 13px !important; }
