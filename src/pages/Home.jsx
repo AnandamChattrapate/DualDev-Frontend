@@ -581,24 +581,39 @@ export default function Home() {
 
         {/* join room input */}
         {!isSearching && !roomId && !pendingMatch && (
-          <div className="flex gap-3 justify-center mt-5">
-            <input
-              className="bg-[#0A0A0A] border border-[#2A2A2A] text-[#E8E8E8] font-mono-display text-sm px-4 py-2.5 rounded-md outline-none focus:border-[#00FF85]/50 transition-colors w-44 placeholder:text-[#444]"
-              placeholder="Enter Room ID"
-              value={friendRoomId}
-              onChange={(e) => setFriendRoomId(e.target.value)}
-            />
-            <button
-              className={`font-mono-display font-bold text-xs tracking-widest px-5 py-2.5 rounded-md transition-all ${
-                friendRoomId
-                  ? 'bg-[#161616] text-[#E8E8E8] border border-[#2A2A2A] hover:border-[#444]'
-                  : 'bg-[#111] text-[#333] border border-[#1A1A1A] cursor-not-allowed'
-              }`}
-              onClick={joinRoom}
-              disabled={!friendRoomId}
-            >
-              Join Room
-            </button>
+          <div className="flex flex-col items-center mt-8 gap-4">
+            {/* OR divider */}
+            <div className="flex items-center gap-4 w-full max-w-sm">
+              <div className="flex-1 h-px bg-[#2A2A2A]" />
+              <span className="font-mono-display text-[11px] text-[#444] tracking-[3px]">OR</span>
+              <div className="flex-1 h-px bg-[#2A2A2A]" />
+            </div>
+
+            <div className="w-full max-w-sm">
+              <p className="font-mono-display text-[11px] text-[#555] tracking-[2px] text-center mb-3">
+                HAVE A ROOM ID? JOIN YOUR FRIEND
+              </p>
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 bg-[#111] border border-[#333] text-[#E8E8E8] font-mono-display text-sm px-4 py-3 rounded-md outline-none focus:border-[#FF7A00]/60 transition-colors placeholder:text-[#555]"
+                  placeholder="e.g. room-1749023481234"
+                  value={friendRoomId}
+                  onChange={(e) => setFriendRoomId(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && friendRoomId && joinRoom()}
+                />
+                <button
+                  className={`font-mono-display font-bold text-xs tracking-widest px-5 py-3 rounded-md transition-all whitespace-nowrap ${
+                    friendRoomId
+                      ? 'bg-[#FF7A00] text-black hover:bg-[#ff8d32]'
+                      : 'bg-[#161616] text-[#444] border border-[#222] cursor-not-allowed'
+                  }`}
+                  onClick={joinRoom}
+                  disabled={!friendRoomId}
+                >
+                  Join Room
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
