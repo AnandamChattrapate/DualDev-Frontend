@@ -31,18 +31,31 @@ export default function Result() {
   const checkAuth      = useMatchStore((s) => s.checkAuth);
   const resetMatch     = useMatchStore((s) => s.resetMatch);
 
+  const setWinner  = useMatchStore((s) => s.setWinner);
   const [ratingAfter, setRatingAfter] = useState(null);
 
   const userId = currentUser?._id;
-  const iWon   = winner != null && winner === userId;
+  const iWon   = winner != null && winner !== "draw" && winner === userId;
   const isDraw = winner === "draw";
-  const iLost  = !iWon && !isDraw;
+  const iLost  = winner != null && !iWon && !isDraw;
 
   // Re-fetch user so we have the updated post-match rating
+  // Also fetch match result from server if winner wasn't set (8s fallback navigation)
   useEffect(() => {
     checkAuth().then((res) => {
       if (res?.payload?.rating != null) setRatingAfter(res.payload.rating)
     })
+
+    if (winner == null && matchId) {
+      import("axios").then(({ default: axios }) => {
+        axios.get(`${import.meta.env.VITE_API_URL}/api/match/${matchId}`, { withCredentials: true })
+          .then(res => {
+            const w = res.data?.match?.winner
+            if (w != null) setWinner(w)
+          })
+          .catch(() => {})
+      })
+    }
 
     // Remove CSS variables that Match.jsx injected so layout renders normally
     const vars = ["--bg","--s1","--s2","--border","--text","--muted",
