@@ -542,7 +542,7 @@ export default function Match() {
       const passed = Array.isArray(results) ? results.filter(r => r.passed).length : 0
       const total  = totalTests || results?.length || 0
       const verdict = passed === total && total > 0 ? "Accepted" : `${passed}/${total} Passed`
-      setMyVerdict({ verdict, results, testsPassed: passed })
+      setMyVerdict({ verdict, results, testsPassed: passed, totalTests: total })
       setSubmitting(false)
       incrementSubmission()
       socket.emit("tc_update", { matchId, testsPassed: passed, totalTests: total })

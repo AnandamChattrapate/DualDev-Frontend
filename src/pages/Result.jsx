@@ -20,6 +20,7 @@ export default function Result() {
   const winner         = useMatchStore((s) => s.winner);
   const aiReview       = useMatchStore((s) => s.aiReview);
   const myTestsPassed  = useMatchStore((s) => s.myTestsPassed);
+  const myTotalTests   = useMatchStore((s) => s.myTotalTests);
   const oppTestsPassed = useMatchStore((s) => s.oppTestsPassed);
   const oppTotalTests  = useMatchStore((s) => s.oppTotalTests);
   const myLanguage     = useMatchStore((s) => s.myLanguage);
@@ -33,7 +34,7 @@ export default function Result() {
   const [ratingAfter, setRatingAfter] = useState(null);
 
   const userId = currentUser?._id;
-  const iWon   = winner === userId;
+  const iWon   = winner != null && winner === userId;
   const isDraw = winner === "draw";
   const iLost  = !iWon && !isDraw;
 
@@ -55,8 +56,7 @@ export default function Result() {
   const ratingDiff   = (ratingAfter != null && ratingBefore != null) ? ratingAfter - ratingBefore : null
   const matchDuration = (matchEndTime && matchStartTime) ? matchEndTime - matchStartTime : null
 
-  // Total test cases: use oppTotalTests if we have it, otherwise fall back to myTestsPassed count
-  const totalTests = oppTotalTests || 0
+  const totalTests = myTotalTests || oppTotalTests || 0
 
   const handleHome = () => { resetMatch(); navigate("/") }
 
@@ -110,7 +110,7 @@ export default function Result() {
               label="YOU"
               color="#00FF85"
               testsPassed={myTestsPassed}
-              totalTests={totalTests}
+              totalTests={myTotalTests || totalTests}
               time={formatDuration(matchDuration)}
               language={myLanguage}
             />
@@ -141,7 +141,7 @@ export default function Result() {
               label="OPPONENT"
               color="#FF7A00"
               testsPassed={oppTestsPassed}
-              totalTests={totalTests}
+              totalTests={oppTotalTests || totalTests}
               time="—"
               language={null}
             />

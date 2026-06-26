@@ -256,14 +256,26 @@ export default function Home() {
   const declineMatch = () => { socket.emit('decline_match', { matchId: pendingMatch.matchId }); setPendingMatch(null); setWaitingAccept(false) }
 
   const joinMatch = async () => {
+    if (!socket.connected || !socket.id) {
+      alert("Still connecting to server — please wait a moment and try again.")
+      return
+    }
     try { setSearching(true); setShowModal(false); await axios.post(`${import.meta.env.VITE_API_URL}/api/matchmaking/join`, { socketId: socket.id, topic, difficulty }, { withCredentials: true }) }
     catch (e) { console.error(e.response?.data || e.message); setSearching(false) }
   }
   const createRoom = async () => {
+    if (!socket.connected || !socket.id) {
+      alert("Still connecting to server — please wait a moment and try again.")
+      return
+    }
     try { setShowModal(false); const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/matchmaking/create-room`, { socketId: socket.id, topic, difficulty }, { withCredentials: true }); setRoomId(res.data.roomId) }
     catch (e) { console.error(e.response?.data || e.message) }
   }
   const joinRoom = async () => {
+    if (!socket.connected || !socket.id) {
+      alert("Still connecting to server — please wait a moment and try again.")
+      return
+    }
     try { await axios.post(`${import.meta.env.VITE_API_URL}/api/matchmaking/join-room`, { socketId: socket.id, roomId: friendRoomId }, { withCredentials: true }) }
     catch (e) { console.error(e.response?.data || e.message) }
   }

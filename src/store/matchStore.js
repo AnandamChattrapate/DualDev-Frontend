@@ -46,6 +46,7 @@ const useMatchStore = create(
       myTCResults:     [],
       myVerdict:       null,
       myTestsPassed:   0,
+      myTotalTests:    0,
       isSubmitting:    false,
       submissionCount: 0,
       aiUsageCount:    0,
@@ -143,6 +144,7 @@ const useMatchStore = create(
           myTCResults:     [],
           myVerdict:       null,
           myTestsPassed:   0,
+          myTotalTests:    0,
           isSubmitting:    false,
           submissionCount: 0,
           aiUsageCount:    0,
@@ -194,10 +196,10 @@ const useMatchStore = create(
         return true
       },
 
-      setMyVerdict: ({ verdict, results, testsPassed }) => {
+      setMyVerdict: ({ verdict, results, testsPassed, totalTests }) => {
         const { firstBlood } = get()
         if (!firstBlood && testsPassed > 0) set({ firstBlood: true, firstBloodBy: 'me' })
-        set({ myVerdict: verdict, myTCResults: results, myTestsPassed: testsPassed, isSubmitting: false })
+        set({ myVerdict: verdict, myTCResults: results, myTestsPassed: testsPassed, myTotalTests: totalTests || results?.length || 0, isSubmitting: false })
       },
 
       setOppSilhouette: (silhouette) => set({ oppSilhouette: silhouette }),
@@ -260,6 +262,7 @@ const useMatchStore = create(
           myTCResults:     [],
           myVerdict:       null,
           myTestsPassed:   0,
+          myTotalTests:    0,
           isSubmitting:    false,
           submissionCount: 0,
           aiUsageCount:    0,
@@ -302,6 +305,7 @@ const useMatchStore = create(
         opponent:        state.opponent,
         myVerdict:       state.myVerdict,
         myTestsPassed:   state.myTestsPassed,
+        myTotalTests:    state.myTotalTests,
         myTCResults:     state.myTCResults,
         oppVerdict:      state.oppVerdict,
         oppTestsPassed:  state.oppTestsPassed,
