@@ -389,11 +389,6 @@ export default function Home() {
 
       {[
         {
-          label: "How It Works",
-          id:    "how-it-works",
-          route: null,
-        },
-        {
           label: "Leaderboard",
           id:    null,
           route: "/leaderboard",
@@ -403,7 +398,7 @@ export default function Home() {
           id:    null,
           route: "/pricing",
         }
-      ].map((item, i) => (
+      ].map((item) => (
 
         <button
           key={item.label}
@@ -414,11 +409,7 @@ export default function Home() {
               document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth' })
             }
           }}
-          className={`cursor-pointer text-[16px] font-medium tracking-wide transition-all duration-300 ${
-            i === 0
-              ? "text-[var(--color-text-primary)]"
-              : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-          }`}
+          className="cursor-pointer text-[16px] font-medium tracking-wide text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-all duration-300"
         >
 
           {item.label}
