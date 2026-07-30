@@ -1,1 +1,83 @@
 @import "tailwindcss";
+
+/* Tailwind v4 CSS-first dark variant — matches `dark:` classes against
+   [data-theme="dark"] set on <html> (see src/store/themeStore.js). */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* ── Sitewide theme tokens ──────────────────────────────────────────
+   Brand colors stay fixed across themes: black bg / #00FF85 green /
+   #FF7A00 orange. Light theme reuses the same accent hues on a light
+   surface instead of inventing new brand colors. */
+:root,
+[data-theme="dark"] {
+  --color-bg:            #0A0A0A;
+  --color-surface:       #111111;
+  --color-surface-2:     #161616;
+  --color-border:        #2A2A2A;
+  --color-text-primary:  #E8E8E8;
+  --color-text-secondary:#888888;
+  --color-text-muted:    #555555;
+  --color-accent-green:  #00FF85;
+  --color-accent-orange: #FF7A00;
+}
+
+[data-theme="light"] {
+  --color-bg:            #F5F4F0;
+  --color-surface:       #FFFFFF;
+  --color-surface-2:     #ECEAE4;
+  --color-border:        #D8D6CE;
+  --color-text-primary:  #16160f;
+  --color-text-secondary:#5B5B52;
+  --color-text-muted:    #8A8A80;
+  --color-accent-green:  #00B85F;
+  --color-accent-orange: #E06A00;
+}
+
+html {
+  background-color: var(--color-bg);
+  color-scheme: light dark;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ── Light-mode overrides for literal white/N% utilities ─────────────
+   Home.jsx/Pricing.jsx were built dark-only and lean on Tailwind's
+   `white/10`, `text-white/45`, etc. for "light content on dark bg".
+   Those read as invisible (white-on-white) once data-theme flips to
+   light, since they aren't theme-aware. Rather than rewrite every call
+   site, re-point the exact classes in use to dark-on-light equivalents
+   whenever data-theme="light" is active. Add a line here if a new
+   white/N class shows up in a light-mode page. */
+[data-theme="light"] .bg-white\/\[0\.03\]        { background-color: rgba(0,0,0,0.035) !important; }
+[data-theme="light"] .bg-white\/\[0\.05\]        { background-color: rgba(0,0,0,0.05)  !important; }
+[data-theme="light"] .bg-white\/10               { background-color: rgba(0,0,0,0.08)  !important; }
+[data-theme="light"] .hover\:bg-white\/\[0\.03\]:hover { background-color: rgba(0,0,0,0.05) !important; }
+[data-theme="light"] .hover\:bg-white\/\[0\.02\]:hover { background-color: rgba(0,0,0,0.04) !important; }
+
+[data-theme="light"] .border-white\/5            { border-color: rgba(0,0,0,0.06) !important; }
+[data-theme="light"] .border-white\/10           { border-color: rgba(0,0,0,0.10) !important; }
+[data-theme="light"] .border-white\/15           { border-color: rgba(0,0,0,0.14) !important; }
+[data-theme="light"] .border-white\/20           { border-color: rgba(0,0,0,0.18) !important; }
+[data-theme="light"] .hover\:border-white\/20:hover { border-color: rgba(0,0,0,0.30) !important; }
+
+[data-theme="light"] .text-white\/90             { color: rgba(0,0,0,0.92) !important; }
+[data-theme="light"] .text-white\/80             { color: rgba(0,0,0,0.82) !important; }
+[data-theme="light"] .text-white\/70             { color: rgba(0,0,0,0.72) !important; }
+[data-theme="light"] .text-white\/65             { color: rgba(0,0,0,0.68) !important; }
+[data-theme="light"] .text-white\/60             { color: rgba(0,0,0,0.62) !important; }
+[data-theme="light"] .text-white\/50             { color: rgba(0,0,0,0.55) !important; }
+[data-theme="light"] .text-white\/45             { color: rgba(0,0,0,0.50) !important; }
+[data-theme="light"] .text-white\/40             { color: rgba(0,0,0,0.45) !important; }
+[data-theme="light"] .text-white\/35             { color: rgba(0,0,0,0.40) !important; }
+[data-theme="light"] .text-white\/30             { color: rgba(0,0,0,0.36) !important; }
+[data-theme="light"] .text-white\/20             { color: rgba(0,0,0,0.28) !important; }
+
+/* .dot-grid is a hardcoded rgba(255,255,255,0.04) radial-gradient inline
+   style used on Home/Leaderboard hero sections — invisible on a light bg. */
+[data-theme="light"] .dot-grid {
+  background-image: radial-gradient(circle, rgba(0,0,0,0.06) 1px, transparent 1px) !important;
+}

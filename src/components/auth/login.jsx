@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router'
 import useMatchStore from '../../store/matchStore'
+import useThemeStore from '../../store/themeStore'
 import Register from './Register'
 
 /* ────────────────────────────────────────────────────────────
@@ -11,19 +12,14 @@ import Register from './Register'
 
 const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)'
 
-/* ── Theme (shared with Register via localStorage) ────────── */
+/* ── Theme — now backed by the shared sitewide themeStore instead of a
+   local ad hoc localStorage hook, so switching theme anywhere (navbar,
+   pricing page, etc.) stays in sync with the auth screens. The
+   'dualdev-theme' localStorage key is preserved by the store itself. */
 function useThemeMode() {
-  const [theme, setTheme] = useState(() => {
-    if (typeof window === 'undefined') return 'dark'
-    try { return localStorage.getItem('dualdev-theme') || 'dark' } catch { return 'dark' }
-  })
-  const toggle = () =>
-    setTheme((t) => {
-      const next = t === 'dark' ? 'light' : 'dark'
-      try { localStorage.setItem('dualdev-theme', next) } catch {}
-      return next
-    })
-  return [theme, toggle]
+  const theme = useThemeStore((s) => s.theme)
+  const toggleTheme = useThemeStore((s) => s.toggleTheme)
+  return [theme, toggleTheme]
 }
 
 function ThemeToggle({ theme, onToggle }) {
@@ -439,12 +435,12 @@ export function Login() {
         }
         @media (hover: none), (max-width: 700px) { .cursor-dot { display: none; } }
 
-        /* theme toggle (top-left) */
+        /* theme toggle — in normal flow inside .stage-header (see .intel-panel
+           comment above for why this is no longer position:fixed) */
         .theme-toggle {
-          position: fixed;
-          top: 28px; left: 32px;
           z-index: 10;
           width: 30px; height: 30px;
+          flex-shrink: 0;
           background: transparent;
           border: 1px solid var(--hairline2);
           color: var(--t-second);
@@ -460,14 +456,12 @@ export function Login() {
           background: var(--hover-tint);
         }
         .theme-toggle svg { width: 14px; height: 14px; stroke: currentColor; fill: none; }
-        @media (max-width: 640px) {
-          .theme-toggle { top: 18px; left: 18px; }
-        }
 
-        /* intel panel */
+        /* intel panel — lives in normal document flow inside .stage-header,
+           NEVER position:fixed, so it can't sit on top of the card no
+           matter the viewport height (this was the original overlap bug:
+           a fixed-position corner element floating over form content). */
         .intel-panel {
-          position: fixed;
-          top: 28px; right: 32px;
           z-index: 10;
           font-size: 10.5px;
           font-weight: 200;
@@ -514,10 +508,23 @@ export function Login() {
         .stage {
           position: relative; z-index: 2;
           min-height: 100vh;
-          display: grid;
-          place-items: center;
-          padding: 32px 24px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 40px;
+          padding: calc(32px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right))
+                   calc(32px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
         }
+        .stage-header {
+          width: 100%;
+          max-width: 640px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+        }
+        @media (max-width: 640px) { .stage-header { max-width: 100%; } }
         .card {
           width: 100%;
           max-width: 360px;
@@ -724,13 +731,15 @@ export function Login() {
         }
       `}</style>
 
-      <div className="os-root fixed inset-0 overflow-hidden" data-theme={theme}>
+      <div className="os-root fixed inset-0 overflow-y-auto" data-theme={theme}>
         <Grain reducedMotion={reducedMotion} theme={theme} />
         <CursorTrail reducedMotion={reducedMotion} />
-        <ThemeToggle theme={theme} onToggle={toggleTheme} />
-        <IntelPanel reducedMotion={reducedMotion} />
-
         <div className="stage">
+          <div className="stage-header">
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            <IntelPanel reducedMotion={reducedMotion} />
+          </div>
+
           {phase !== 'welcome' && (
             <form
               onSubmit={handleSubmit}

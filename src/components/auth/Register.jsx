@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import axios from 'axios'
+import useThemeStore from '../../store/themeStore'
 import Login from './login'
 
 /* ────────────────────────────────────────────────────────────
@@ -10,19 +11,11 @@ import Login from './login'
 
 const EASE = 'cubic-bezier(0.16, 1, 0.3, 1)'
 
-/* ── Theme (shared with Login via localStorage) ───────────── */
+/* ── Theme — backed by the shared sitewide themeStore (see login.jsx). */
 function useThemeMode() {
-  const [theme, setTheme] = useState(() => {
-    if (typeof window === 'undefined') return 'dark'
-    try { return localStorage.getItem('dualdev-theme') || 'dark' } catch { return 'dark' }
-  })
-  const toggle = () =>
-    setTheme((t) => {
-      const next = t === 'dark' ? 'light' : 'dark'
-      try { localStorage.setItem('dualdev-theme', next) } catch {}
-      return next
-    })
-  return [theme, toggle]
+  const theme = useThemeStore((s) => s.theme)
+  const toggleTheme = useThemeStore((s) => s.toggleTheme)
+  return [theme, toggleTheme]
 }
 
 function ThemeToggle({ theme, onToggle }) {
@@ -529,12 +522,13 @@ function Register() {
         }
         @media (hover: none), (max-width: 700px) { .cursor-dot { display: none; } }
 
-        /* theme toggle (top-left) */
+        /* theme toggle — normal flow inside .stage-header, not fixed
+           (fixed corner overlays were the source of the overlap-with-card
+           bug on shorter viewports) */
         .theme-toggle {
-          position: fixed;
-          top: 28px; left: 32px;
           z-index: 10;
           width: 30px; height: 30px;
+          flex-shrink: 0;
           background: transparent;
           border: 1px solid var(--hairline2);
           color: var(--t-second);
@@ -550,14 +544,9 @@ function Register() {
           background: var(--hover-tint);
         }
         .theme-toggle svg { width: 14px; height: 14px; stroke: currentColor; fill: none; }
-        @media (max-width: 640px) {
-          .theme-toggle { top: 18px; left: 18px; }
-        }
 
-        /* intel panel */
+        /* intel panel — also normal flow now, see above */
         .intel-panel {
-          position: fixed;
-          top: 28px; right: 32px;
           z-index: 10;
           font-size: 10.5px;
           font-weight: 200;
@@ -604,10 +593,23 @@ function Register() {
         .stage {
           position: relative; z-index: 2;
           min-height: 100vh;
-          display: grid;
-          place-items: center;
-          padding: 48px 24px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 40px;
+          padding: calc(48px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right))
+                   calc(48px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
         }
+        .stage-header {
+          width: 100%;
+          max-width: 640px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+        }
+        @media (max-width: 640px) { .stage-header { max-width: 100%; } }
         .card {
           width: 100%;
           max-width: 380px;
@@ -872,17 +874,19 @@ function Register() {
         }
       `}</style>
 
-      <div className="os-root fixed inset-0 overflow-hidden" data-theme={theme}>
+      <div className="os-root fixed inset-0 overflow-y-auto" data-theme={theme}>
         <Grain reducedMotion={reducedMotion} theme={theme} />
         <CursorTrail reducedMotion={reducedMotion} />
-        <ThemeToggle theme={theme} onToggle={toggleTheme} />
-        <IntelPanel
-          reducedMotion={reducedMotion}
-          theme={theme}
-          status={phase === 'sweeping' || phase === 'dashboard' ? 'active' : 'online'}
-        />
-
         <div className="stage">
+          <div className="stage-header">
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
+            <IntelPanel
+              reducedMotion={reducedMotion}
+              theme={theme}
+              status={phase === 'sweeping' || phase === 'dashboard' ? 'active' : 'online'}
+            />
+          </div>
+
           {phase !== 'dashboard' && (
             <form
               onSubmit={handleSubmit}

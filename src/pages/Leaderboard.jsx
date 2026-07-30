@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import { Sun, Moon } from 'lucide-react'
 import useMatchStore from '../store/matchStore'
+import useThemeStore from '../store/themeStore'
 
 /* ────────────────────────────────────────────────────────────
    /leaderboard
    Matches the visual language of Home.jsx:
-   #0A0A0A bg, Space Mono display, #00FF85 accent, dot-grid.
+   var(--color-bg) bg, Space Mono display, #00FF85 accent, dot-grid.
    Real data from /api/leaderboard/me (top 9 + your row).
    ──────────────────────────────────────────────────────────── */
 
@@ -33,14 +35,14 @@ function Row({ rank, username, rating, wins, losses, avatar, isMe }) {
 
   return (
     <div
-      className={`grid grid-cols-[56px_1fr_90px_90px_120px] px-6 py-4 border-b border-[#111] items-center transition-colors ${
+      className={`grid grid-cols-[56px_1fr_90px_90px_120px] px-6 py-4 border-b border-[var(--color-surface)] items-center transition-colors ${
         isMe ? 'bg-[#00FF85]/[0.04]' : 'hover:bg-white/[0.02]'
       }`}
     >
       {/* Rank */}
       <span
         className="font-mono-display font-bold text-base tabnum"
-        style={{ color: rank <= 3 ? color : '#555' }}
+        style={{ color: rank <= 3 ? color : 'var(--color-text-muted)' }}
       >
         {rank ?? '—'}
       </span>
@@ -56,7 +58,7 @@ function Row({ rank, username, rating, wins, losses, avatar, isMe }) {
             : initial(username)}
         </span>
         <div className="min-w-0">
-          <div className="font-mono-display text-[13px] text-[#E8E8E8] truncate flex items-center gap-2">
+          <div className="font-mono-display text-[13px] text-[var(--color-text-primary)] truncate flex items-center gap-2">
             @{username || 'unknown'}
             {isMe && (
               <span className="font-mono-display text-[9px] tracking-widest border border-[#00FF85]/40 text-[#00FF85] px-1.5 py-0.5 rounded-sm">
@@ -71,14 +73,14 @@ function Row({ rank, username, rating, wins, losses, avatar, isMe }) {
       </div>
 
       {/* Wins */}
-      <span className="font-mono-display text-[13px] text-[#888] tabnum">🏆 {wins ?? 0}</span>
+      <span className="font-mono-display text-[13px] text-[var(--color-text-secondary)] tabnum">🏆 {wins ?? 0}</span>
 
       {/* Win Rate */}
       <span className="font-mono-display text-[13px] text-[#00FF85] tabnum">↗ {rate}</span>
 
       {/* Rating */}
-      <span className="font-mono-display text-[13px] text-[#E8E8E8] tabnum text-right">
-        {rating != null ? Math.round(rating) : '—'} <span className="text-[#444]">ELO</span>
+      <span className="font-mono-display text-[13px] text-[var(--color-text-primary)] tabnum text-right">
+        {rating != null ? Math.round(rating) : '—'} <span className="text-[var(--color-text-muted)]">ELO</span>
       </span>
     </div>
   )
@@ -86,15 +88,15 @@ function Row({ rank, username, rating, wins, losses, avatar, isMe }) {
 
 function SkeletonRow() {
   return (
-    <div className="grid grid-cols-[56px_1fr_90px_90px_120px] px-6 py-4 border-b border-[#111] items-center">
-      <span className="h-3 w-6 rounded bg-[#1a1a1a]" />
+    <div className="grid grid-cols-[56px_1fr_90px_90px_120px] px-6 py-4 border-b border-[var(--color-surface)] items-center">
+      <span className="h-3 w-6 rounded bg-[var(--color-surface-2)]" />
       <div className="flex items-center gap-3">
-        <span className="w-9 h-9 rounded-full bg-[#1a1a1a]" />
-        <span className="h-3 w-32 rounded bg-[#1a1a1a]" />
+        <span className="w-9 h-9 rounded-full bg-[var(--color-surface-2)]" />
+        <span className="h-3 w-32 rounded bg-[var(--color-surface-2)]" />
       </div>
-      <span className="h-3 w-12 rounded bg-[#1a1a1a]" />
-      <span className="h-3 w-12 rounded bg-[#1a1a1a]" />
-      <span className="h-3 w-16 rounded bg-[#1a1a1a] justify-self-end" />
+      <span className="h-3 w-12 rounded bg-[var(--color-surface-2)]" />
+      <span className="h-3 w-12 rounded bg-[var(--color-surface-2)]" />
+      <span className="h-3 w-16 rounded bg-[var(--color-surface-2)] justify-self-end" />
     </div>
   )
 }
@@ -103,6 +105,8 @@ export default function Leaderboard() {
   const navigate        = useNavigate()
   const isAuthenticated = useMatchStore((s) => s.isAuthenticated)
   const currentUser     = useMatchStore((s) => s.currentUser)
+  const theme           = useThemeStore((s) => s.theme)
+  const toggleTheme     = useThemeStore((s) => s.toggleTheme)
 
   const [top,      setTop]      = useState([])
   const [me,       setMe]       = useState(null)
@@ -151,7 +155,7 @@ export default function Leaderboard() {
     : ''
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-[#E8E8E8] overflow-x-hidden">
+    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] overflow-x-hidden">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
         .font-mono-display { font-family: 'Space Mono', monospace; }
@@ -173,13 +177,13 @@ export default function Leaderboard() {
 
       {/* ── Minimal nav (just back to home + brand) ── */}
       <nav className="fixed top-4 left-0 w-full z-50 px-5">
-        <div className="max-w-[82rem] mx-auto h-[72px] px-10 flex items-center justify-between rounded-full border border-white/20 bg-black/30 backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.45)]">
+        <div className="max-w-[82rem] mx-auto h-[72px] px-10 flex items-center justify-between rounded-full border border-[var(--color-border)]/60 bg-[var(--color-surface)]/25 backdrop-blur-2xl backdrop-saturate-150 shadow-[0_8px_32px_rgba(0,0,0,0.2)]">
           <button
             onClick={() => navigate('/')}
             className="flex items-center gap-3 cursor-pointer select-none"
           >
             <h1 className="font-claude text-[40px] font-extrabold tracking-[-2px] leading-none">
-              <span className="text-white">DUAL</span>
+              <span className="text-[var(--color-text-primary)]">DUAL</span>
               <span className="text-[#F4B183]">DEV</span>
             </h1>
           </button>
@@ -187,25 +191,36 @@ export default function Leaderboard() {
           <div className="hidden md:flex items-center gap-14">
             <button
               onClick={() => navigate('/')}
-              className="text-[16px] font-medium tracking-wide text-white/65 hover:text-white transition-all duration-300"
+              className="cursor-pointer text-[16px] font-medium tracking-wide text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-all duration-300"
             >
               Home
             </button>
-            <span className="text-[16px] font-medium tracking-wide text-white">
+            <span className="text-[16px] font-medium tracking-wide text-[var(--color-text-primary)]">
               Leaderboard
             </span>
           </div>
 
-          <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 bg-white/[0.03]">
-            <span className="w-2 h-2 rounded-full bg-[#00FF85] animate-pulse" />
-            {currentUser ? (
-              <>
-                <span className="text-sm text-white/90">{currentUser.username}</span>
-                <span className="text-sm font-semibold text-[#00FF85]">{currentUser.rating}</span>
-              </>
-            ) : (
-              <span className="text-sm text-white/65">Guest</span>
-            )}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={toggleTheme}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+              className="cursor-pointer h-10 w-10 flex items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)] transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[#00FF85]"
+            >
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+
+            <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)]">
+              <span className="w-2 h-2 rounded-full bg-[#00FF85] animate-pulse" />
+              {currentUser ? (
+                <>
+                  <span className="text-sm text-[var(--color-text-primary)]">{currentUser.username}</span>
+                  <span className="text-sm font-semibold text-[#00FF85]">{currentUser.rating}</span>
+                </>
+              ) : (
+                <span className="text-sm text-[var(--color-text-secondary)]">Guest</span>
+              )}
+            </div>
           </div>
         </div>
       </nav>
@@ -215,7 +230,7 @@ export default function Leaderboard() {
         <div className="max-w-2xl mx-auto fade-up">
           <div className="flex items-center justify-center gap-3 mb-3 flex-wrap">
             <h2
-              className="font-mono-display font-bold text-[#E8E8E8] tracking-tight"
+              className="font-mono-display font-bold text-[var(--color-text-primary)] tracking-tight"
               style={{ fontSize: 'clamp(28px, 5vw, 48px)' }}
             >
               Global Leaderboard
@@ -225,7 +240,7 @@ export default function Leaderboard() {
               LIVE
             </span>
           </div>
-          <p className="text-[#555] text-sm">
+          <p className="text-[var(--color-text-muted)] text-sm">
             The top warriors in competitive coding. Updated in real-time.
           </p>
         </div>
@@ -233,7 +248,7 @@ export default function Leaderboard() {
 
       {/* ── Stat strip ── */}
       <section className="px-6 pb-10">
-        <div className="max-w-3xl mx-auto grid grid-cols-3 bg-[#111] border border-[#2A2A2A] rounded-xl overflow-hidden">
+        <div className="max-w-3xl mx-auto grid grid-cols-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl overflow-hidden">
           {[
             { label: 'Total Ranked', value: total },
             { label: 'Your Rating',  value: me?.rating != null ? Math.round(me.rating) : '—' },
@@ -241,12 +256,12 @@ export default function Leaderboard() {
           ].map((s, i) => (
             <div
               key={s.label}
-              className={`px-6 py-5 ${i < 2 ? 'border-r border-[#2A2A2A]' : ''}`}
+              className={`px-6 py-5 ${i < 2 ? 'border-r border-[var(--color-border)]' : ''}`}
             >
-              <div className="font-mono-display text-[10px] tracking-widest text-[#555] uppercase">
+              <div className="font-mono-display text-[10px] tracking-widest text-[var(--color-text-muted)] uppercase">
                 {s.label}
               </div>
-              <div className="font-mono-display font-bold text-2xl text-[#E8E8E8] tabnum mt-1">
+              <div className="font-mono-display font-bold text-2xl text-[var(--color-text-primary)] tabnum mt-1">
                 {s.value}
               </div>
             </div>
@@ -258,20 +273,20 @@ export default function Leaderboard() {
       <section className="px-6 pb-12">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-3 px-1">
-            <span className="font-mono-display text-[10px] tracking-widest text-[#555]">
+            <span className="font-mono-display text-[10px] tracking-widest text-[var(--color-text-muted)]">
               TOP 9
             </span>
-            <span className="font-mono-display text-[10px] tracking-widest text-[#555]">
+            <span className="font-mono-display text-[10px] tracking-widest text-[var(--color-text-muted)]">
               {timeAgo && `SYNCED ${timeAgo}`}
             </span>
           </div>
 
-          <div className="bg-[#111] border border-[#2A2A2A] rounded-xl overflow-hidden">
-            <div className="grid grid-cols-[56px_1fr_90px_90px_120px] px-6 py-3 border-b border-[#1A1A1A]">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl overflow-hidden">
+            <div className="grid grid-cols-[56px_1fr_90px_90px_120px] px-6 py-3 border-b border-[var(--color-surface-2)]">
               {['#', 'PLAYER', 'WINS', 'WIN RATE', 'RATING'].map((h, i) => (
                 <span
                   key={h}
-                  className={`font-mono-display text-[10px] tracking-widest text-[#444] ${i === 4 ? 'text-right' : ''}`}
+                  className={`font-mono-display text-[10px] tracking-widest text-[var(--color-text-muted)] ${i === 4 ? 'text-right' : ''}`}
                 >
                   {h}
                 </span>
@@ -291,7 +306,7 @@ export default function Leaderboard() {
             )}
 
             {!loading && !error && top.length === 0 && (
-              <div className="px-6 py-8 text-center font-mono-display text-[12px] tracking-widest text-[#555]">
+              <div className="px-6 py-8 text-center font-mono-display text-[12px] tracking-widest text-[var(--color-text-muted)]">
                 NO RANKED PLAYERS YET — BE THE FIRST
               </div>
             )}
@@ -317,14 +332,14 @@ export default function Leaderboard() {
         <section className="px-6 pb-20">
           <div className="max-w-3xl mx-auto">
             <div className="flex items-center justify-between mb-3 px-1">
-              <span className="font-mono-display text-[10px] tracking-widest text-[#555]">
+              <span className="font-mono-display text-[10px] tracking-widest text-[var(--color-text-muted)]">
                 YOUR STANDING
               </span>
               <span className="font-mono-display text-[10px] tracking-widest text-[#00FF85]">
                 #{me.rank ?? '—'} OF {total}
               </span>
             </div>
-            <div className="bg-[#111] border border-[#00FF85]/30 rounded-xl overflow-hidden me-row">
+            <div className="bg-[var(--color-surface)] border border-[#00FF85]/30 rounded-xl overflow-hidden me-row">
               <Row
                 rank={me.rank ?? '—'}
                 username={me.username || currentUser?.username || 'You'}
@@ -340,14 +355,14 @@ export default function Leaderboard() {
       )}
 
       {/* ── Footer-ish bottom strip ── */}
-      <section className="border-t border-[#1A1A1A] px-6 py-8">
+      <section className="border-t border-[var(--color-surface-2)] px-6 py-8">
         <div className="max-w-3xl mx-auto flex items-center justify-between flex-wrap gap-4">
-          <div className="font-mono-display text-[10px] tracking-widest text-[#444]">
+          <div className="font-mono-display text-[10px] tracking-widest text-[var(--color-text-muted)]">
             DATA SOURCE · REDIS SORTED SET · LIVE
           </div>
           <button
             onClick={() => navigate('/')}
-            className="font-mono-display text-[11px] tracking-widest text-[#888] hover:text-[#00FF85] transition-colors"
+            className="font-mono-display text-[11px] tracking-widest text-[var(--color-text-secondary)] hover:text-[#00FF85] transition-colors"
           >
             ← BACK TO HOME
           </button>

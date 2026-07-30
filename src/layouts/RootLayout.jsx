@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import useMatchStore from "../store/matchStore"
 
 /* Below this width we block the app and show a "use a real machine" notice */
@@ -148,11 +149,28 @@ export default function RootLayout() {
     /* eslint-disable-next-line */
   }, [isAuthenticated, location.pathname])
 
-  if (tooNarrow) return <DesktopOnly />
+  const reducedMotion = useReducedMotion()
+
+  /* Only gate the actual match room behind the desktop-only notice.
+     Every other route (Home, Leaderboard, Pricing, Login, Result, …)
+     must render normally even on narrow viewports. */
+  if (tooNarrow && location.pathname.startsWith('/match/')) {
+    return <DesktopOnly />
+  }
 
   return (
     <div>
-      <Outlet />
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={location.pathname}
+          initial={reducedMotion ? false : { opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={reducedMotion ? undefined : { opacity: 0, y: -12 }}
+          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <Outlet />
+        </motion.div>
+      </AnimatePresence>
     </div>
   )
 }

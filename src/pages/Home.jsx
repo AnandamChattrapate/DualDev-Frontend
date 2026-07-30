@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { Swords, Users, Check, X, Zap, Target, Link2, Sun, Moon } from 'lucide-react'
 import useMatchStore from '../store/matchStore.js'
+import useThemeStore from '../store/themeStore.js'
 import socket from '../socket/socket.js'
 import MatchmakingRouteDiscovery from "../components/MatchmakingRouteDiscovery.jsx";
+
+const MIN_MATCH_WIDTH = 768
 
 export default function Home() {
   const navigate        = useNavigate()
@@ -14,6 +19,11 @@ export default function Home() {
   const setSearching    = useMatchStore((s) => s.setSearching)
   const initMatch       = useMatchStore((s) => s.initMatch)
   const logout          = useMatchStore((s) => s.logout)
+  const theme           = useThemeStore((s) => s.theme)
+  const toggleTheme     = useThemeStore((s) => s.toggleTheme)
+  const reducedMotion   = useReducedMotion()
+
+  const [mobileWarning, setMobileWarning] = useState(null)
 
   const [showModal, setShowModal]   = useState(false)
   const [topic, setTopic]           = useState("Array")
@@ -255,7 +265,21 @@ export default function Home() {
   const acceptMatch  = () => { socket.emit('accept_match',  { matchId: pendingMatch.matchId }); setWaitingAccept(true) }
   const declineMatch = () => { socket.emit('decline_match', { matchId: pendingMatch.matchId }); setPendingMatch(null); setWaitingAccept(false) }
 
+  /* Task 4/5 — actions that require an active match session must check
+     auth first (redirect to /login) and screen width first (inline
+     warning instead of letting the user queue and get stuck on mobile). */
+  const requiresDesktopAndAuth = () => {
+    if (!isAuthenticated) { navigate('/login'); return false }
+    if (window.innerWidth < MIN_MATCH_WIDTH) {
+      setMobileWarning("Matches require a desktop or laptop screen (≥768px). Please switch devices to play.")
+      setTimeout(() => setMobileWarning(null), 5000)
+      return false
+    }
+    return true
+  }
+
   const joinMatch = async () => {
+    if (!requiresDesktopAndAuth()) return
     if (!socket.connected || !socket.id) {
       alert("Still connecting to server — please wait a moment and try again.")
       return
@@ -264,6 +288,7 @@ export default function Home() {
     catch (e) { console.error(e.response?.data || e.message); setSearching(false) }
   }
   const createRoom = async () => {
+    if (!requiresDesktopAndAuth()) return
     if (!socket.connected || !socket.id) {
       alert("Still connecting to server — please wait a moment and try again.")
       return
@@ -272,6 +297,7 @@ export default function Home() {
     catch (e) { console.error(e.response?.data || e.message) }
   }
   const joinRoom = async () => {
+    if (!requiresDesktopAndAuth()) return
     if (!socket.connected || !socket.id) {
       alert("Still connecting to server — please wait a moment and try again.")
       return
@@ -292,32 +318,22 @@ export default function Home() {
 
   // ── Loading ──────────────────────────────────────────────────────────
   if (authLoading) return (
-    <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
+    <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center">
       <div className="text-center">
-        <div className="w-8 h-8 border-2 border-[#2A2A2A] border-t-[#00FF85] rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-[#666] font-mono text-xs tracking-[3px]">INITIALIZING</p>
+        <div className="w-8 h-8 border-2 border-[var(--color-border)] border-t-[#00FF85] rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-[var(--color-text-muted)] font-mono text-xs tracking-[3px]">INITIALIZING</p>
       </div>
     </div>
   )
 
-  // ── Not authenticated ────────────────────────────────────────────────
-  if (!isAuthenticated) return (
-    <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center justify-center gap-6 font-mono">
-      <p className="text-[#666] text-sm">Authentication required</p>
-      <button
-        onClick={() => navigate('/login')}
-        className="bg-[#00FF85] text-black font-bold text-xs tracking-widest px-6 py-3 rounded-md hover:brightness-110 transition-all"
-      >
-        Go to Login
-      </button>
-    </div>
-  )
+  // Home is public — unauthenticated visitors see the full page. Only the
+  // match-starting actions (joinMatch/createRoom/joinRoom) gate on auth.
 
   const ringCircumference = 2 * Math.PI * 34
   const ringOffset = ringCircumference - (ringCircumference * (acceptCountdown / 30))
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-[#E8E8E8] overflow-x-hidden">
+    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] overflow-x-hidden">
 
       {/* ── GLOBAL STYLES injected via style tag ── */}
       <style>{`
@@ -341,7 +357,7 @@ export default function Home() {
       ════════════════════════════════════════════════════════════ */}
       <nav className="fixed top-4 left-0 w-full z-50 px-5">
 
-  <div className="max-w-[82rem] mx-auto h-[72px] px-10 flex items-center justify-between rounded-full border border-white/20 bg-black/30 backdrop-blur-2xl shadow-[0_10px_40px_rgba(0,0,0,0.45)]">
+  <div className="max-w-[82rem] mx-auto h-[72px] px-10 flex items-center justify-between rounded-full border border-[var(--color-border)]/60 bg-[var(--color-surface)]/25 backdrop-blur-2xl backdrop-saturate-150 shadow-[0_8px_32px_rgba(0,0,0,0.2)]">
 
     {/* LOGO */}
     <div
@@ -356,7 +372,7 @@ export default function Home() {
 
       <h1 className="font-claude text-[40px] font-extrabold tracking-[-2px] leading-none">
 
-        <span className="text-white">
+        <span className="text-[var(--color-text-primary)]">
           DUAL
         </span>
 
@@ -381,6 +397,11 @@ export default function Home() {
           label: "Leaderboard",
           id:    null,
           route: "/leaderboard",
+        },
+        {
+          label: "Pricing",
+          id:    null,
+          route: "/pricing",
         }
       ].map((item, i) => (
 
@@ -393,10 +414,10 @@ export default function Home() {
               document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth' })
             }
           }}
-          className={`text-[16px] font-medium tracking-wide transition-all duration-300 ${
+          className={`cursor-pointer text-[16px] font-medium tracking-wide transition-all duration-300 ${
             i === 0
-              ? "text-white"
-              : "text-white/65 hover:text-white"
+              ? "text-[var(--color-text-primary)]"
+              : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
           }`}
         >
 
@@ -411,51 +432,99 @@ export default function Home() {
     {/* RIGHT */}
     <div className="flex items-center gap-4">
 
-      {/* USER */}
-      <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 bg-white/[0.03]">
-
-        <span className="w-2 h-2 rounded-full bg-[#00FF85] animate-pulse" />
-
-        <span className="text-sm text-white/90">
-          {currentUser?.username}
-        </span>
-
-        <span className="text-sm font-semibold text-[#00FF85]">
-          {currentUser?.rating}
-        </span>
-
-      </div>
-
-      {/* MODES BUTTON */}
+      {/* THEME TOGGLE */}
       <button
-        onClick={() =>
-          document
-            .getElementById('battle-modes')
-            ?.scrollIntoView({
-              behavior: 'smooth'
-            })
-        }
-        className="h-12 px-7 rounded-full bg-[#FF7A00] hover:bg-[#ff8800] text-white text-[15px] font-semibold transition-all duration-300 hover:scale-[1.03]"
+        onClick={toggleTheme}
+        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+        className="cursor-pointer h-10 w-10 flex items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)] transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[#00FF85]"
       >
-
-        Modes
-
+        {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
       </button>
 
-      {/* LOGOUT BUTTON */}
-      <button
-        onClick={handleLogout}
-        className="h-12 px-5 rounded-full border border-white/10 bg-white/[0.03] hover:bg-red-500/10 hover:border-red-500/30 text-white/60 hover:text-[#FF5A5A] text-[14px] font-medium transition-all duration-300"
-        title="Logout"
-      >
-        Logout
-      </button>
+      {isAuthenticated ? (
+        <>
+          {/* USER */}
+          <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)]">
+
+            <span className="w-2 h-2 rounded-full bg-[#00FF85] animate-pulse" />
+
+            <span className="text-sm text-[var(--color-text-primary)]">
+              {currentUser?.username}
+            </span>
+
+            <span className="text-sm font-semibold text-[#00FF85]">
+              {currentUser?.rating}
+            </span>
+
+          </div>
+
+          {/* MODES BUTTON */}
+          <button
+            onClick={() =>
+              document
+                .getElementById('battle-modes')
+                ?.scrollIntoView({
+                  behavior: 'smooth'
+                })
+            }
+            className="cursor-pointer h-12 px-7 rounded-full bg-[#FF7A00] hover:bg-[#ff8800] text-white text-[15px] font-semibold transition-all duration-300 hover:scale-[1.03] focus-visible:outline-2 focus-visible:outline-white"
+          >
+
+            Modes
+
+          </button>
+
+          {/* LOGOUT BUTTON */}
+          <button
+            onClick={handleLogout}
+            className="cursor-pointer h-12 px-5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] hover:bg-red-500/10 hover:border-red-500/30 text-[var(--color-text-secondary)] hover:text-[#FF5A5A] text-[14px] font-medium transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[#FF5A5A]"
+            title="Logout"
+          >
+            Logout
+          </button>
+        </>
+      ) : (
+        <>
+          {/* LOGIN BUTTON */}
+          <button
+            onClick={() => navigate('/login')}
+            className="cursor-pointer h-12 px-6 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] hover:border-[var(--color-text-muted)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] text-[14px] font-medium transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[#00FF85]"
+          >
+            Login
+          </button>
+
+          {/* SIGN UP BUTTON */}
+          <button
+            onClick={() => navigate('/login')}
+            className="cursor-pointer h-12 px-7 rounded-full bg-[#00FF85] hover:brightness-110 text-black text-[15px] font-semibold transition-all duration-300 hover:scale-[1.03] focus-visible:outline-2 focus-visible:outline-white"
+          >
+            Sign Up
+          </button>
+        </>
+      )}
 
     </div>
 
   </div>
 
 </nav>
+
+      {/* Inline mobile-width warning toast (Task 5) — non-blocking, replaces alert() */}
+      <AnimatePresence>
+        {mobileWarning && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.25 }}
+            className="fixed top-24 left-1/2 -translate-x-1/2 z-[400] bg-[var(--color-border)] border border-[#FF7A00]/40 text-[#FF7A00] text-sm font-medium px-5 py-3 rounded-xl shadow-xl max-w-sm text-center"
+            role="alert"
+          >
+            {mobileWarning}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ════════════════════════════════════════════════════════════
           HERO
@@ -466,23 +535,23 @@ export default function Home() {
 
         {/* status badges */}
         <div className="flex gap-3 justify-center mb-12 flex-wrap">
-          <span className="flex items-center gap-2 bg-white/[0.03] border border-[#2A2A2A] rounded-full px-4 py-2 font-mono-display text-[11px] text-[#888]">
+          <span className="flex items-center gap-2 bg-white/[0.03] border border-[var(--color-border)] rounded-full px-4 py-2 font-mono-display text-[11px] text-[var(--color-text-secondary)]">
             <span className="live-dot w-1.5 h-1.5 rounded-full bg-[#ead24a] shrink-0" />
             {battlesLiveNow} battles live now
           </span>
-          <span className="flex items-center gap-2 bg-white/[0.03] border border-[#2A2A2A] rounded-full px-4 py-2 font-mono-display text-[11px] text-[#888]">
-            <span className="text-[#dbf362]">⚡</span>
+          <span className="flex items-center gap-2 bg-white/[0.03] border border-[var(--color-border)] rounded-full px-4 py-2 font-mono-display text-[11px] text-[var(--color-text-secondary)]">
+            <Zap size={12} className="text-[#dbf362]" />
             Avg match: 8 mins
           </span>
         </div>
 
         {/* headline */}
-        <h1 className="font-mono-display font-bold text-[#E8E8E8] leading-[1.05] tracking-tight mb-5"
+        <h1 className="font-mono-display font-bold text-[var(--color-text-primary)] leading-[1.05] tracking-tight mb-5"
           style={{ fontSize: 'clamp(42px, 7vw, 94px)' }}>
           Code.&nbsp;&nbsp;Compete.<br />
           <span className="text-[#00FF85]">Dominate.</span>
         </h1>
-        <p className="text-[#555] text-[15px] tracking-wide mb-10">
+        <p className="text-[var(--color-text-muted)] text-[15px] tracking-wide mb-10">
           Real-time 1v1 coding battles. Ranked. Live. Brutal.
         </p>
 
@@ -496,18 +565,24 @@ export default function Home() {
               Play with Random
             </button>
             <button
-              className="bg-transparent text-[#E8E8E8] border border-[#2A2A2A] font-mono-display font-bold text-xs tracking-widest px-9 py-4 rounded-md hover:border-[#444] hover:bg-white/[0.03] transition-all"
+              className="cursor-pointer bg-[var(--color-surface-2)] text-[var(--color-text-primary)] border-2 border-[#FF7A00]/40 font-mono-display font-bold text-xs tracking-widest px-9 py-4 rounded-md hover:border-[#FF7A00] hover:bg-[#FF7A00]/10 transition-all"
               onClick={() => { setMode("friend"); setShowModal(true) }}
             >
-              ▷&nbsp;&nbsp;Challenge Friend
+              <Users size={14} className="inline -mt-0.5 mr-1" />Challenge Friend
             </button>
           </div>
         )}
 
         {/* Issue 3 — full-screen overlay so home page is blocked while searching.
             Hidden when pendingMatch is set so the accept popup can show on top. */}
+        <AnimatePresence>
         {isSearching && !pendingMatch && (
-          <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center z-[200] gap-8">
+          <motion.div
+            initial={reducedMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={reducedMotion ? undefined : { opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="fixed inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center z-[200] gap-8">
             {/* Animated radar rings */}
             <div className="relative flex items-center justify-center">
               <span className="absolute w-32 h-32 rounded-full border border-[#00FF85]/10 animate-ping" style={{ animationDuration:"2s" }} />
@@ -522,18 +597,18 @@ export default function Home() {
                 <span className="search-dot w-2 h-2 rounded-full bg-[#00FF85] inline-block" />
                 <span className="font-mono-display text-[13px] text-[#00FF85] tracking-[4px]">SEARCHING FOR OPPONENT</span>
               </div>
-              <p className="font-mono-display text-[11px] text-[#555] tracking-wider mt-1">
+              <p className="font-mono-display text-[11px] text-[var(--color-text-muted)] tracking-wider mt-1">
                 {topic} · {difficulty}
               </p>
             </div>
 
             {/* Countdown bar */}
             <div className="w-64">
-              <div className="flex justify-between font-mono-display text-[10px] text-[#555] mb-2 tracking-wider">
+              <div className="flex justify-between font-mono-display text-[10px] text-[var(--color-text-muted)] mb-2 tracking-wider">
                 <span>AUTO-CANCEL IN</span>
-                <span className={searchSecondsLeft <= 10 ? "text-[#FF4444]" : "text-[#888]"}>{searchSecondsLeft}s</span>
+                <span className={searchSecondsLeft <= 10 ? "text-[#FF4444]" : "text-[var(--color-text-secondary)]"}>{searchSecondsLeft}s</span>
               </div>
-              <div className="w-full h-1 bg-[#1A1A1A] rounded-full overflow-hidden">
+              <div className="w-full h-1 bg-[var(--color-border)] rounded-full overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all duration-1000"
                   style={{
@@ -547,24 +622,25 @@ export default function Home() {
             <MatchmakingRouteDiscovery />
 
             <button
-              className="bg-[#161616] text-[#E8E8E8] border border-[#2A2A2A] font-mono-display font-bold text-xs tracking-widest px-8 py-3 rounded-md hover:border-[#444] transition-all"
+              className="bg-[var(--color-surface-2)] text-[var(--color-text-primary)] border border-[var(--color-border)] font-mono-display font-bold text-xs tracking-widest px-8 py-3 rounded-md hover:border-[var(--color-text-muted)] transition-all"
               onClick={cancelSearch}
             >
               Cancel Search
             </button>
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
         {roomId && (
-          <div className="inline-block bg-[#111] border border-[#2A2A2A] rounded-lg px-10 py-5 mt-4 text-center">
-            <p className="font-mono-display text-[10px] tracking-[3px] text-[#555] mb-3">SHARE ROOM ID</p>
+          <div className="inline-block bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-10 py-5 mt-4 text-center">
+            <p className="font-mono-display text-[10px] tracking-[3px] text-[var(--color-text-muted)] mb-3">SHARE ROOM ID</p>
             <div className="flex items-center justify-center gap-3">
               <span className="font-mono-display text-xl text-[#00FF85] tracking-[6px]">{roomId}</span>
               <button
                 className={`font-mono-display text-[11px] px-3 py-1 rounded transition-all border ${
                   roomCopied
                     ? "bg-[#00FF85]/10 text-[#00FF85] border-[#00FF85]/40"
-                    : "bg-[#161616] text-[#888] border-[#2A2A2A] hover:border-[#444]"
+                    : "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:border-[var(--color-text-muted)]"
                 }`}
                 onClick={() => {
                   navigator.clipboard.writeText(roomId)
@@ -572,10 +648,10 @@ export default function Home() {
                   setTimeout(() => setRoomCopied(false), 2000)
                 }}
               >
-                {roomCopied ? "✓ Copied!" : "Copy"}
+                {roomCopied ? (<span className="inline-flex items-center gap-1"><Check size={12}/> Copied!</span>) : "Copy"}
               </button>
             </div>
-            <p className="font-mono-display text-[10px] text-[#444] mt-3 tracking-wider">Waiting for opponent to join...</p>
+            <p className="font-mono-display text-[10px] text-[var(--color-text-muted)] mt-3 tracking-wider">Waiting for opponent to join...</p>
           </div>
         )}
 
@@ -584,21 +660,21 @@ export default function Home() {
           <div className="flex flex-col items-center mt-10 gap-5">
             {/* OR divider */}
             <div className="flex items-center gap-4 w-full max-w-lg">
-              <div className="flex-1 h-px bg-[#333]" />
-              <span className="font-mono-display text-sm text-[#666] tracking-[4px]">OR</span>
-              <div className="flex-1 h-px bg-[#333]" />
+              <div className="flex-1 h-px bg-[var(--color-border)]" />
+              <span className="font-mono-display text-sm text-[var(--color-text-muted)] tracking-[4px]">OR</span>
+              <div className="flex-1 h-px bg-[var(--color-border)]" />
             </div>
 
-            <div className="w-full max-w-lg bg-[#111] border border-[#333] rounded-xl p-6">
-              <p className="font-mono-display text-base text-[#E8E8E8] font-bold tracking-wide text-center mb-1">
+            <div className="w-full max-w-lg bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6">
+              <p className="font-mono-display text-base text-[var(--color-text-primary)] font-bold tracking-wide text-center mb-1">
                 Join a Friend's Room
               </p>
-              <p className="text-[#888] text-sm text-center mb-5">
+              <p className="text-[var(--color-text-secondary)] text-sm text-center mb-5">
                 Paste the Room ID your friend shared with you
               </p>
               <div className="flex gap-3">
                 <input
-                  className="flex-1 bg-[#0A0A0A] border-2 border-[#FF7A00]/40 text-[#E8E8E8] font-mono-display text-base px-5 py-3.5 rounded-lg outline-none focus:border-[#FF7A00] transition-colors placeholder:text-[#666]"
+                  className="flex-1 bg-[var(--color-bg)] border-2 border-[#FF7A00]/40 text-[var(--color-text-primary)] font-mono-display text-base px-5 py-3.5 rounded-lg outline-none focus:border-[#FF7A00] transition-colors placeholder:text-[var(--color-text-muted)]"
                   placeholder="Enter Room ID here..."
                   value={friendRoomId}
                   onChange={(e) => setFriendRoomId(e.target.value)}
@@ -608,12 +684,12 @@ export default function Home() {
                   className={`font-mono-display font-bold text-sm tracking-widest px-7 py-3.5 rounded-lg transition-all whitespace-nowrap ${
                     friendRoomId
                       ? 'bg-[#FF7A00] text-black hover:bg-[#ff8d32] hover:scale-[1.03]'
-                      : 'bg-[#1A1A1A] text-[#555] border border-[#2A2A2A] cursor-not-allowed'
+                      : 'bg-[var(--color-border)] text-[var(--color-text-muted)] border border-[var(--color-border)] cursor-not-allowed'
                   }`}
                   onClick={joinRoom}
                   disabled={!friendRoomId}
                 >
-                  ▷ Join Room
+                  <Users size={14} className="inline -mt-0.5 mr-1" />Join Room
                 </button>
               </div>
             </div>
@@ -621,16 +697,16 @@ export default function Home() {
         )}
 
         {/* ── terminal preview card ── */}
-        <div className="max-w-3xl mx-auto mt-16 bg-[#111] border border-[#2A2A2A] rounded-xl overflow-hidden text-left shadow-2xl">
+        <div className="max-w-3xl mx-auto mt-16 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl overflow-hidden text-left shadow-2xl">
 
   {/* macOS bar */}
-  <div className="bg-[#161616] border-b border-[#1E1E1E] px-4 py-3 flex items-center gap-2">
+  <div className="bg-[var(--color-surface-2)] border-b border-[var(--color-border)] px-4 py-3 flex items-center gap-2">
 
     <span className="w-3 h-3 rounded-full bg-[#FF5F57]" />
     <span className="w-3 h-3 rounded-full bg-[#FEBC2E]" />
     <span className="w-3 h-3 rounded-full bg-[#28C840]" />
 
-    <span className="flex-1 text-center font-mono-display text-[11px] text-[#444]">
+    <span className="flex-1 text-center font-mono-display text-[11px] text-[var(--color-text-muted)]">
 
       Problem: Two Sum &nbsp;&nbsp;
 
@@ -640,7 +716,7 @@ export default function Home() {
 
     </span>
 
-    <span className="font-mono-display text-[11px] text-[#444]">
+    <span className="font-mono-display text-[11px] text-[var(--color-text-muted)]">
       Difficulty: Medium
     </span>
 
@@ -650,7 +726,7 @@ export default function Home() {
   <div className="grid grid-cols-2">
 
     {/* YOU */}
-    <div className="p-4 border-r border-[#1E1E1E]">
+    <div className="p-4 border-r border-[var(--color-border)]">
 
       <div className="flex items-center gap-2 mb-4">
 
@@ -658,7 +734,7 @@ export default function Home() {
           Y
         </span>
 
-        <span className="font-mono-display text-[11px] text-[#666]">
+        <span className="font-mono-display text-[11px] text-[var(--color-text-muted)]">
           You (Python)
         </span>
 
@@ -668,11 +744,11 @@ export default function Home() {
 
   <div key={i} className="flex gap-4 mb-0.5">
 
-    <span className="font-mono-display text-[11px] text-[#333] w-4 text-right shrink-0">
+    <span className="font-mono-display text-[11px] text-[var(--color-border)] w-4 text-right shrink-0">
       {i + 1}
     </span>
 
-    <span className="font-mono-display text-[11px] text-[#C8C8C8] whitespace-pre">
+    <span className="font-mono-display text-[11px] text-[var(--color-text-primary)] whitespace-pre">
 
       {line}
 
@@ -698,7 +774,7 @@ export default function Home() {
       O
     </span>
 
-    <span className="font-mono-display text-[11px] text-[#666]">
+    <span className="font-mono-display text-[11px] text-[var(--color-text-muted)]">
       ninja_coder (C++)
     </span>
 
@@ -708,11 +784,11 @@ export default function Home() {
 
   <div key={i} className="flex gap-4 mb-0.5">
 
-    <span className="font-mono-display text-[11px] text-[#333] w-4 text-right shrink-0">
+    <span className="font-mono-display text-[11px] text-[var(--color-border)] w-4 text-right shrink-0">
       {i + 1}
     </span>
 
-    <span className="font-mono-display text-[11px] text-[#8A8A8A] whitespace-pre">
+    <span className="font-mono-display text-[11px] text-[var(--color-text-secondary)] whitespace-pre">
 
       {line}
 
@@ -739,7 +815,7 @@ export default function Home() {
           STATS BAR
       ════════════════════════════════════════════════════════════ */}
       {/* PLATFORM STATS */}
-<div className="border-y border-[#1A1A1A] bg-[#0D0D0D]">
+<div className="border-y border-[var(--color-border)] bg-[var(--color-bg)]">
 
   {/* backend values */}
   {/*
@@ -755,7 +831,7 @@ export default function Home() {
       Stats unavailable — {error}
     </div>
   )}
-  <div className="max-w-5xl mx-auto grid grid-cols-5 divide-x divide-[#1A1A1A] py-10 px-6">
+  <div className="max-w-5xl mx-auto grid grid-cols-5 divide-x divide-[var(--color-border)] py-10 px-6">
     {[
       [playersOnline, 'Players Online'],
       [battlesPlayed, 'Battles Played'],
@@ -764,10 +840,14 @@ export default function Home() {
       [judgeUptime, 'Judge Uptime']
     ].map(([val, label]) => (
       <div key={label} className="text-center px-4">
-        <div className="font-mono-display text-[34px] font-bold text-[#00FF85] tracking-tight">
-          {val}
-        </div>
-        <div className="text-[#555] text-xs mt-1 uppercase tracking-[1px]">
+        {loading ? (
+          <div className="h-[34px] w-20 mx-auto bg-white/10 rounded-md animate-pulse" />
+        ) : (
+          <div className="font-mono-display text-[34px] font-bold text-[#00FF85] tracking-tight">
+            {val}
+          </div>
+        )}
+        <div className="text-[var(--color-text-muted)] text-xs mt-1 uppercase tracking-[1px]">
           {label}
         </div>
       </div>
@@ -778,7 +858,7 @@ export default function Home() {
                     HOW IT WORKS
         ═════════════════════════════════════════════════════ */}
 
-<section id="how-it-works" className="relative px-6 py-32 border-t border-[#151515] overflow-hidden">
+<section id="how-it-works" className="relative px-6 py-32 border-t border-[var(--color-border)] overflow-hidden">
 
   <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(0,255,133,0.05),transparent_45%)] pointer-events-none" />
 
@@ -788,7 +868,7 @@ export default function Home() {
     <div className="text-center mb-24">
 
       <h2
-        className="font-claude text-white font-bold tracking-[-3px] leading-none"
+        className="font-claude text-[var(--color-text-primary)] font-bold tracking-[-3px] leading-none"
         style={{ fontSize: 'clamp(42px,7vw,78px)' }}
       >
         How It Works
@@ -804,7 +884,13 @@ export default function Home() {
     <div className="space-y-8">
 
       {/* STEP 1 */}
-      <div className="bg-[#0F0F10]/80 border border-white/10 rounded-[32px] p-8 md:p-12 backdrop-blur-xl">
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.2 }}
+        transition={{ duration: 0.5, ease: [0.16,1,0.3,1] }}
+        whileHover={{ scale: 1.01 }}
+        className="bg-[var(--color-surface)]/80 border border-white/10 rounded-[32px] p-8 md:p-12 backdrop-blur-xl">
 
         <div className="grid md:grid-cols-2 gap-14 items-center">
 
@@ -823,7 +909,7 @@ export default function Home() {
                   Matchmaking
                 </div>
 
-                <h3 className="font-claude text-white text-[34px] font-bold tracking-[-1.5px]">
+                <h3 className="font-claude text-[var(--color-text-primary)] text-[34px] font-bold tracking-[-1.5px]">
                   Pick Your Battle
                 </h3>
 
@@ -834,21 +920,21 @@ export default function Home() {
             <div className="space-y-5 text-[15px] text-white/70 leading-relaxed">
 
               <div className="flex items-start gap-3">
-                <span className="text-[#00FF85] mt-1">◎</span>
+                <Target size={14} className="text-[#00FF85] mt-1 shrink-0" />
                 <span>
                   Choose topic — Arrays, Graphs, DP, Trees, HashMaps
                 </span>
               </div>
 
               <div className="flex items-start gap-3">
-                <span className="text-[#00FF85] mt-1">◎</span>
+                <Target size={14} className="text-[#00FF85] mt-1 shrink-0" />
                 <span>
                   Select difficulty — Easy, Medium, or Hard
                 </span>
               </div>
 
               <div className="flex items-start gap-3">
-                <span className="text-[#00FF85] mt-1">◎</span>
+                <Target size={14} className="text-[#00FF85] mt-1 shrink-0" />
                 <span>
                   Find a live opponent matched by rating in seconds
                 </span>
@@ -926,10 +1012,16 @@ export default function Home() {
 
         </div>
 
-      </div>
+      </motion.div>
 
       {/* STEP 2 */}
-      <div className="bg-[#0F0F10]/80 border border-white/10 rounded-[32px] p-8 md:p-12 backdrop-blur-xl">
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.2 }}
+        transition={{ duration: 0.5, ease: [0.16,1,0.3,1] }}
+        whileHover={{ scale: 1.01 }}
+        className="bg-[var(--color-surface)]/80 border border-white/10 rounded-[32px] p-8 md:p-12 backdrop-blur-xl">
 
         <div className="grid md:grid-cols-2 gap-14 items-center">
 
@@ -948,7 +1040,7 @@ export default function Home() {
                   Real-Time Coding
                 </div>
 
-                <h3 className="font-claude text-white text-[34px] font-bold tracking-[-1.5px]">
+                <h3 className="font-claude text-[var(--color-text-primary)] text-[34px] font-bold tracking-[-1.5px]">
                   Code Live
                 </h3>
 
@@ -959,21 +1051,21 @@ export default function Home() {
             <div className="space-y-5 text-[15px] text-white/70 leading-relaxed">
 
               <div className="flex items-start gap-3">
-                <span className="text-[#00FF85] mt-1">◎</span>
+                <Target size={14} className="text-[#00FF85] mt-1 shrink-0" />
                 <span>
                   Your real code stays fully visible to you
                 </span>
               </div>
 
               <div className="flex items-start gap-3">
-                <span className="text-[#00FF85] mt-1">◎</span>
+                <Target size={14} className="text-[#00FF85] mt-1 shrink-0" />
                 <span>
                   Opponents only see a live silhouette of your logic
                 </span>
               </div>
 
               <div className="flex items-start gap-3">
-                <span className="text-[#00FF85] mt-1">◎</span>
+                <Target size={14} className="text-[#00FF85] mt-1 shrink-0" />
                 <span>
                   Adapt to strategies while racing against the clock
                 </span>
@@ -1018,7 +1110,7 @@ export default function Home() {
 
                 </div>
 
-                <div className="space-y-1 font-mono-display text-[11px] text-[#D6D6D6]">
+                <div className="space-y-1 font-mono-display text-[11px] text-[var(--color-text-primary)]">
 
                   <div>def two_sum(nums, target):</div>
                   <div>    seen = {}</div>
@@ -1044,7 +1136,7 @@ export default function Home() {
 
                 </div>
 
-                <div className="space-y-1 font-mono-display text-[11px] text-[#7A7A7A]">
+                <div className="space-y-1 font-mono-display text-[11px] text-[var(--color-text-secondary)]">
 
                   <div>def ▓▓▓▓▓▓(▓▓▓▓, ▓▓▓▓▓▓):</div>
                   <div>    ▓▓▓▓ = {'{}'}</div>
@@ -1070,10 +1162,16 @@ export default function Home() {
 
         </div>
 
-      </div>
+      </motion.div>
 
       {/* STEP 3 */}
-      <div className="bg-[#0F0F10]/80 border border-white/10 rounded-[32px] p-8 md:p-12 backdrop-blur-xl">
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.2 }}
+        transition={{ duration: 0.5, ease: [0.16,1,0.3,1] }}
+        whileHover={{ scale: 1.01 }}
+        className="bg-[var(--color-surface)]/80 border border-white/10 rounded-[32px] p-8 md:p-12 backdrop-blur-xl">
 
         <div className="grid md:grid-cols-2 gap-14 items-center">
 
@@ -1092,7 +1190,7 @@ export default function Home() {
                   AI Judge
                 </div>
 
-                <h3 className="font-claude text-white text-[34px] font-bold tracking-[-1.5px]">
+                <h3 className="font-claude text-[var(--color-text-primary)] text-[34px] font-bold tracking-[-1.5px]">
                   AI Decides the Winner
                 </h3>
 
@@ -1103,21 +1201,21 @@ export default function Home() {
             <div className="space-y-5 text-[15px] text-white/70 leading-relaxed">
 
               <div className="flex items-start gap-3">
-                <span className="text-[#00FF85] mt-1">✓</span>
+                <Check size={14} className="text-[#00FF85] mt-1 shrink-0" />
                 <span>
                   Evaluates test cases, runtime, and memory usage
                 </span>
               </div>
 
               <div className="flex items-start gap-3">
-                <span className="text-[#00FF85] mt-1">✓</span>
+                <Check size={14} className="text-[#00FF85] mt-1 shrink-0" />
                 <span>
                   Considers efficiency, submissions, and completion speed
                 </span>
               </div>
 
               <div className="flex items-start gap-3">
-                <span className="text-[#00FF85] mt-1">✓</span>
+                <Check size={14} className="text-[#00FF85] mt-1 shrink-0" />
                 <span>
                   Picks the strongest solution — not just the first solution
                 </span>
@@ -1138,7 +1236,7 @@ export default function Home() {
 
               <div>
 
-                <div className="text-white font-semibold text-lg">
+                <div className="text-[var(--color-text-primary)] font-semibold text-lg">
                   AI Match Review
                 </div>
 
@@ -1169,7 +1267,7 @@ export default function Home() {
                     {label}
                   </span>
 
-                  <span className="text-white text-sm font-medium">
+                  <span className="text-[var(--color-text-primary)] text-sm font-medium">
                     {value}
                   </span>
 
@@ -1183,7 +1281,7 @@ export default function Home() {
 
         </div>
 
-      </div>
+      </motion.div>
 
     </div>
 
@@ -1194,7 +1292,7 @@ export default function Home() {
       {/* ════════════════════════════════════════════════════════════
           BATTLE MODES
       ════════════════════════════════════════════════════════════ */}
-      <section id="battle-modes" className="bg-[#0D0D0D] border-y border-[#1A1A1A] px-6 py-28 overflow-hidden">
+      <section id="battle-modes" className="bg-[var(--color-bg)] border-y border-[var(--color-border)] px-6 py-28 overflow-hidden">
 
   <div className="max-w-6xl mx-auto">
 
@@ -1202,7 +1300,7 @@ export default function Home() {
     <div className="text-center mb-20">
 
       <h2
-        className="font-claude text-white font-bold tracking-[-3px] leading-none"
+        className="font-claude text-[var(--color-text-primary)] font-bold tracking-[-3px] leading-none"
         style={{ fontSize: 'clamp(42px,7vw,72px)' }}
       >
         Battle Modes
@@ -1218,7 +1316,13 @@ export default function Home() {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
       {/* RANDOM MATCHMAKING */}
-      <div className="bg-[#101010] border border-white/10 rounded-[32px] p-8 backdrop-blur-xl relative overflow-hidden">
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.2 }}
+        transition={{ duration: 0.5, ease: [0.16,1,0.3,1] }}
+        whileHover={{ scale: 1.02 }}
+        className="bg-[var(--color-surface)] border border-white/10 rounded-[32px] p-8 backdrop-blur-xl relative overflow-hidden">
 
         {/* glow */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-[#00FF85]/5 blur-3xl rounded-full pointer-events-none" />
@@ -1229,10 +1333,10 @@ export default function Home() {
           <div>
 
             <div className="w-14 h-14 rounded-2xl bg-[#00FF85]/10 border border-[#00FF85]/20 flex items-center justify-center text-[#00FF85] text-2xl mb-5">
-              ⚔
+              <Swords size={22} />
             </div>
 
-            <h3 className="font-claude text-white text-[34px] font-bold tracking-[-1.5px]">
+            <h3 className="font-claude text-[var(--color-text-primary)] text-[34px] font-bold tracking-[-1.5px]">
               Play With Random
             </h3>
 
@@ -1260,7 +1364,7 @@ export default function Home() {
 
             <div>
 
-              <div className="text-white text-sm font-medium mb-1">
+              <div className="text-[var(--color-text-primary)] text-sm font-medium mb-1">
                 Choose Difficulty & Topic
               </div>
 
@@ -1280,7 +1384,7 @@ export default function Home() {
 
             <div>
 
-              <div className="text-white text-sm font-medium mb-1">
+              <div className="text-[var(--color-text-primary)] text-sm font-medium mb-1">
                 Enter Matchmaking Queue
               </div>
 
@@ -1300,7 +1404,7 @@ export default function Home() {
 
             <div>
 
-              <div className="text-white text-sm font-medium mb-1">
+              <div className="text-[var(--color-text-primary)] text-sm font-medium mb-1">
                 Balanced Rating Matchups
               </div>
 
@@ -1341,10 +1445,16 @@ export default function Home() {
 
         </div>
 
-      </div>
+      </motion.div>
 
       {/* PLAY WITH FRIEND */}
-      <div className="bg-[#101010] border border-white/10 rounded-[32px] p-8 backdrop-blur-xl relative overflow-hidden">
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.2 }}
+        transition={{ duration: 0.5, ease: [0.16,1,0.3,1] }}
+        whileHover={{ scale: 1.02 }}
+        className="bg-[var(--color-surface)] border border-white/10 rounded-[32px] p-8 backdrop-blur-xl relative overflow-hidden">
 
         {/* glow */}
         <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#FF7A00]/5 blur-3xl rounded-full pointer-events-none" />
@@ -1355,10 +1465,10 @@ export default function Home() {
           <div>
 
             <div className="w-14 h-14 rounded-2xl bg-[#FF7A00]/10 border border-[#FF7A00]/20 flex items-center justify-center text-[#FF7A00] text-2xl mb-5">
-              👥
+              <Users size={22} />
             </div>
 
-            <h3 className="font-claude text-white text-[34px] font-bold tracking-[-1.5px]">
+            <h3 className="font-claude text-[var(--color-text-primary)] text-[34px] font-bold tracking-[-1.5px]">
               Play With Friend
             </h3>
 
@@ -1386,7 +1496,7 @@ export default function Home() {
 
             <div>
 
-              <div className="text-white text-sm font-medium mb-1">
+              <div className="text-[var(--color-text-primary)] text-sm font-medium mb-1">
                 Create Battle Room
               </div>
 
@@ -1406,7 +1516,7 @@ export default function Home() {
 
             <div>
 
-              <div className="text-white text-sm font-medium mb-1">
+              <div className="text-[var(--color-text-primary)] text-sm font-medium mb-1">
                 Friend Joins Using Room ID
               </div>
 
@@ -1426,7 +1536,7 @@ export default function Home() {
 
             <div>
 
-              <div className="text-white text-sm font-medium mb-1">
+              <div className="text-[var(--color-text-primary)] text-sm font-medium mb-1">
                 Real-Time Head-to-Head Match
               </div>
 
@@ -1447,7 +1557,7 @@ export default function Home() {
 
             <div>
 
-              <div className="text-white text-sm font-medium">
+              <div className="text-[var(--color-text-primary)] text-sm font-medium">
                 Private Room
               </div>
 
@@ -1483,7 +1593,7 @@ export default function Home() {
 
         </div>
 
-      </div>
+      </motion.div>
 
     </div>
 
@@ -1494,19 +1604,19 @@ export default function Home() {
       {/* ════════════════════════════════════════════════════════════
           FOOTER
       ════════════════════════════════════════════════════════════ */}
-      <footer className="bg-[#0D0D0D] border-t border-[#1A1A1A] px-6 pt-12 pb-7">
+      <footer className="bg-[var(--color-bg)] border-t border-[var(--color-border)] px-6 pt-12 pb-7">
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-10 mb-10">
             <div>
               <span className="font-mono-display font-bold text-sm tracking-widest">
-                <span className="text-[#E8E8E8]">Dual</span><span className="text-[#00FF85]">Dev</span>
+                <span className="text-[var(--color-text-primary)]">Dual</span><span className="text-[#00FF85]">Dev</span>
               </span>
-              <p className="text-[#555] text-xs leading-relaxed mt-3 max-w-[200px]">
+              <p className="text-[var(--color-text-muted)] text-xs leading-relaxed mt-3 max-w-[200px]">
                 The ultimate platform for competitive coders. Battle in real-time, climb the ranks, and prove your skills.
               </p>
               <div className="flex gap-2 mt-4">
-                {['𝕏','⌥','in'].map(icon => (
-                  <span key={icon} className="w-8 h-8 border border-[#2A2A2A] rounded-md flex items-center justify-center text-[#555] text-xs cursor-pointer hover:border-[#444] hover:text-[#888] transition-all">{icon}</span>
+                {['X','in','+'].map(icon => (
+                  <span key={icon} className="w-8 h-8 border border-[var(--color-border)] rounded-md flex items-center justify-center text-[var(--color-text-muted)] text-xs cursor-pointer hover:border-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-all">{icon}</span>
                 ))}
               </div>
             </div>
@@ -1517,16 +1627,22 @@ export default function Home() {
               ['Legal', ['Privacy','Terms','Cookies']],
             ].map(([title, links]) => (
               <div key={title}>
-                <h4 className="font-mono-display text-[#E8E8E8] text-[11px] tracking-widest mb-4">{title}</h4>
+                <h4 className="font-mono-display text-[var(--color-text-primary)] text-[11px] tracking-widest mb-4">{title}</h4>
                 {links.map(l => (
-                  <div key={l} className="text-[#555] text-xs mb-2.5 cursor-pointer hover:text-[#888] transition-colors">{l}</div>
+                  <div
+                    key={l}
+                    onClick={l === 'Pricing' ? () => navigate('/pricing') : l === 'Leaderboard' ? () => navigate('/leaderboard') : undefined}
+                    className="text-[var(--color-text-muted)] text-xs mb-2.5 cursor-pointer hover:text-[var(--color-text-secondary)] transition-colors"
+                  >
+                    {l}
+                  </div>
                 ))}
               </div>
             ))}
           </div>
-          <div className="border-t border-[#1A1A1A] pt-5 flex items-center justify-between">
-            <span className="font-mono-display text-[11px] text-[#444]">© 2026 DualDev. All rights reserved.</span>
-            <span className="font-mono-display text-[11px] text-[#444] flex items-center gap-2">
+          <div className="border-t border-[var(--color-border)] pt-5 flex items-center justify-between">
+            <span className="font-mono-display text-[11px] text-[var(--color-text-muted)]">© 2026 DualDev. All rights reserved.</span>
+            <span className="font-mono-display text-[11px] text-[var(--color-text-muted)] flex items-center gap-2">
               <span className="live-dot w-1.5 h-1.5 rounded-full bg-[#00FF85] inline-block" />
               All systems operational
             </span>
@@ -1539,12 +1655,23 @@ export default function Home() {
       ════════════════════════════════════════════════════════════ */}
 
       {/* Accept / Decline popup — z-[300] keeps it above the searching overlay */}
+      <AnimatePresence>
       {pendingMatch && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[300]">
-          <div className="slide-up bg-[#111] border border-[#2A2A2A] rounded-2xl p-10 min-w-[340px] text-center">
-            <h2 className="font-mono-display text-[#00FF85] text-lg font-bold mb-2">⚔️ Match Found!</h2>
-            <p className="text-[#888] text-sm mb-1">
-              vs <strong className="text-[#E8E8E8]">{pendingMatch.opponent?.username}</strong>
+        <motion.div
+          initial={reducedMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={reducedMotion ? undefined : { opacity: 0 }}
+          transition={{ duration: 0.25 }}
+          className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[300]">
+          <motion.div
+            initial={reducedMotion ? false : { opacity: 0, y: 20, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reducedMotion ? undefined : { opacity: 0, y: 20, scale: 0.97 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-10 min-w-[340px] text-center">
+            <h2 className="font-mono-display text-[#00FF85] text-lg font-bold mb-2"><span className="inline-flex items-center gap-2"><Swords size={16}/> Match Found!</span></h2>
+            <p className="text-[var(--color-text-secondary)] text-sm mb-1">
+              vs <strong className="text-[var(--color-text-primary)]">{pendingMatch.opponent?.username}</strong>
               <span className="text-[#00FF85] font-mono-display ml-2">{pendingMatch.opponent?.rating}</span>
             </p>
             <p className="text-[#F59E0B] font-mono-display text-xs tracking-wider mb-8">
@@ -1561,7 +1688,7 @@ export default function Home() {
             {/* countdown ring */}
             <div className="relative w-20 h-20 mx-auto mb-8">
               <svg width="80" height="80" className="-rotate-90">
-                <circle cx="40" cy="40" r="34" fill="none" stroke="#1A1A1A" strokeWidth="4" />
+                <circle cx="40" cy="40" r="34" fill="none" stroke="var(--color-border)" strokeWidth="4" />
                 <circle cx="40" cy="40" r="34" fill="none" stroke="#00FF85" strokeWidth="4"
                   strokeDasharray={ringCircumference}
                   strokeDashoffset={ringOffset}
@@ -1569,7 +1696,7 @@ export default function Home() {
                   style={{ transition: 'stroke-dashoffset 1s linear' }}
                 />
               </svg>
-              <span className="absolute inset-0 flex items-center justify-center font-mono-display text-xl font-bold text-[#E8E8E8]">
+              <span className="absolute inset-0 flex items-center justify-center font-mono-display text-xl font-bold text-[var(--color-text-primary)]">
                 {acceptCountdown}
               </span>
             </div>
@@ -1585,42 +1712,66 @@ export default function Home() {
                   onClick={acceptMatch}
                   className="bg-[#00FF85] text-black font-mono-display font-bold text-xs tracking-widest px-6 py-3 rounded-md hover:brightness-110 transition-all"
                 >
-                  ✓ Accept
+                  <span className="inline-flex items-center gap-1"><Check size={14}/> Accept</span>
                 </button>
                 <button
                   onClick={declineMatch}
                   className="bg-red-500/10 text-[#FF3355] border border-red-500/30 font-mono-display font-bold text-xs tracking-widest px-6 py-3 rounded-md hover:bg-red-500/15 transition-all"
                 >
-                  ✗ Decline
+                  <span className="inline-flex items-center gap-1"><X size={14}/> Decline</span>
                 </button>
               </div>
             )}
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* Match starting countdown */}
+      <AnimatePresence>
       {startCountdown !== null && startCountdown > 0 && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[200]">
-          <div className="slide-up bg-[#111] border border-[#2A2A2A] rounded-2xl px-16 py-12 text-center">
+        <motion.div
+          initial={reducedMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={reducedMotion ? undefined : { opacity: 0 }}
+          transition={{ duration: 0.25 }}
+          className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[200]">
+          <motion.div
+            initial={reducedMotion ? false : { opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={reducedMotion ? undefined : { opacity: 0, scale: 0.9 }}
+            transition={{ duration: 0.3 }}
+            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl px-16 py-12 text-center">
             <div className="font-mono-display text-[72px] font-bold text-[#00FF85] leading-none mb-3">{startCountdown}</div>
-            <p className="font-mono-display text-[#666] text-[11px] tracking-[4px]">MATCH STARTING</p>
-          </div>
-        </div>
+            <p className="font-mono-display text-[var(--color-text-muted)] text-[11px] tracking-[4px]">MATCH STARTING</p>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* Match config modal */}
+      <AnimatePresence>
       {showModal && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[200]">
-          <div className="slide-up bg-[#111] border border-[#2A2A2A] rounded-2xl p-10 min-w-[320px]">
-            <h3 className="font-mono-display text-[#E8E8E8] text-sm tracking-[3px] mb-7">
-              {mode === "random" ? "🎯 FIND MATCH" : "🔗 CHALLENGE FRIEND"}
+        <motion.div
+          initial={reducedMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={reducedMotion ? undefined : { opacity: 0 }}
+          transition={{ duration: 0.25 }}
+          className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[200]">
+          <motion.div
+            initial={reducedMotion ? false : { opacity: 0, y: 20, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={reducedMotion ? undefined : { opacity: 0, y: 20, scale: 0.97 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-10 min-w-[320px]">
+            <h3 className="font-mono-display text-[var(--color-text-primary)] text-sm tracking-[3px] mb-7">
+              {mode === "random" ? (<span className="inline-flex items-center gap-2"><Target size={14}/> FIND MATCH</span>) : (<span className="inline-flex items-center gap-2"><Link2 size={14}/> CHALLENGE FRIEND</span>)}
             </h3>
 
             <div className="flex flex-col gap-1.5 mb-4">
-              <label className="font-mono-display text-[10px] tracking-[2px] text-[#555]">TOPIC</label>
+              <label className="font-mono-display text-[10px] tracking-[2px] text-[var(--color-text-muted)]">TOPIC</label>
               <select
-                className="bg-[#0A0A0A] border border-[#2A2A2A] text-[#E8E8E8] font-mono-display text-sm px-3 py-2.5 rounded-md outline-none focus:border-[#00FF85]/50 transition-colors"
+                className="bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text-primary)] font-mono-display text-sm px-3 py-2.5 rounded-md outline-none focus:border-[#00FF85]/50 transition-colors"
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
               >
@@ -1631,9 +1782,9 @@ export default function Home() {
             </div>
 
             <div className="flex flex-col gap-1.5 mb-8">
-              <label className="font-mono-display text-[10px] tracking-[2px] text-[#555]">DIFFICULTY</label>
+              <label className="font-mono-display text-[10px] tracking-[2px] text-[var(--color-text-muted)]">DIFFICULTY</label>
               <select
-                className="bg-[#0A0A0A] border border-[#2A2A2A] text-[#E8E8E8] font-mono-display text-sm px-3 py-2.5 rounded-md outline-none focus:border-[#00FF85]/50 transition-colors"
+                className="bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text-primary)] font-mono-display text-sm px-3 py-2.5 rounded-md outline-none focus:border-[#00FF85]/50 transition-colors"
                 value={difficulty}
                 onChange={(e) => setDifficulty(e.target.value)}
               >
@@ -1652,14 +1803,15 @@ export default function Home() {
               </button>
               <button
                 onClick={() => setShowModal(false)}
-                className="bg-[#161616] text-[#E8E8E8] border border-[#2A2A2A] font-mono-display font-bold text-xs tracking-widest px-6 py-3 rounded-md hover:border-[#444] transition-all"
+                className="bg-[var(--color-surface-2)] text-[var(--color-text-primary)] border border-[var(--color-border)] font-mono-display font-bold text-xs tracking-widest px-6 py-3 rounded-md hover:border-[var(--color-text-muted)] transition-all"
               >
                 Cancel
               </button>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
     </div>
   )
