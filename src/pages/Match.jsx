@@ -333,6 +333,7 @@ export default function Match() {
   const fetchActiveMatch      = useMatchStore((s) => s.fetchActiveMatch)
   const initMatch             = useMatchStore((s) => s.initMatch)
   const setMatchEndTime       = useMatchStore((s) => s.setMatchEndTime)
+  const applyFinalResult      = useMatchStore((s) => s.applyFinalResult)
 
   const [runResults,     setRunResults]     = useState([])
   const [isRunning,      setIsRunning]      = useState(false)
@@ -551,11 +552,15 @@ export default function Match() {
     socket.on("opponent_tc_update", ({ userId: sid, testsPassed, totalTests }) => { if (sid !== userId) setOppProgress({ testsPassed, totalTests }) })
     socket.on("opponent_tokens", ({ tokens }) => { setOppSilhouette(tokens) })
     socket.on("opponent_emote",     ({ emote })                            => { setIncomingEmote(emote); setShowEmotePopup(emote); setTimeout(() => setShowEmotePopup(null), 2400) })
-    socket.on("match_result", ({ winnerId, aiReview }) => {
+    socket.on("match_result", ({ winnerId, aiReview, players }) => {
       matchResultReceived.current = true
       setMatchEndTime(Date.now())
       setWinner(winnerId)
       if (aiReview) setAIReview(aiReview)
+      if (players) {
+        const oppId = useMatchStore.getState().opponent?.userId
+        applyFinalResult({ mine: players[userId], opp: oppId ? players[oppId] : null })
+      }
       setMatchEnded(true)
       navigate(`/result/${matchId}`)
     })

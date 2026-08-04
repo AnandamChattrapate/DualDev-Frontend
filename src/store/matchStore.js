@@ -234,6 +234,17 @@ const useMatchStore = create(
 
       setOppVerdict: ({ verdict, testsPassed }) => set({ oppVerdict: verdict, oppTestsPassed: testsPassed }),
 
+      // Authoritative final stats from the server's match_result event — overrides
+      // whatever was pieced together from live socket events, which may have been
+      // missed on reload or late join.
+      applyFinalResult: ({ mine, opp }) => set((state) => ({
+        myTestsPassed:  mine?.testsPassed ?? state.myTestsPassed,
+        myTotalTests:   mine?.totalTests  ?? state.myTotalTests,
+        oppTestsPassed: opp?.testsPassed  ?? state.oppTestsPassed,
+        oppTotalTests:  opp?.totalTests   ?? state.oppTotalTests,
+        oppLanguage:    opp?.language     ?? state.oppLanguage,
+      })),
+
       setAIReview: (review) => set({ aiReview: review }),
 
       revealHint: (index) => set((state) => ({ activeHints: [...state.activeHints, index] })),
@@ -310,6 +321,7 @@ const useMatchStore = create(
         oppVerdict:      state.oppVerdict,
         oppTestsPassed:  state.oppTestsPassed,
         oppTotalTests:   state.oppTotalTests,
+        oppLanguage:     state.oppLanguage,
         aiUsageLeft:     state.aiUsageLeft,
         matchStartTime:  state.matchStartTime,
         myRatingBefore:  state.myRatingBefore,

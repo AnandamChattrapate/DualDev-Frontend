@@ -24,6 +24,7 @@ export default function Result() {
   const oppTestsPassed = useMatchStore((s) => s.oppTestsPassed);
   const oppTotalTests  = useMatchStore((s) => s.oppTotalTests);
   const myLanguage     = useMatchStore((s) => s.myLanguage);
+  const oppLanguage    = useMatchStore((s) => s.oppLanguage);
   const myCode         = useMatchStore((s) => s.codeByLanguage[s.myLanguage]);
   const myRatingBefore = useMatchStore((s) => s.myRatingBefore);
   const matchStartTime = useMatchStore((s) => s.matchStartTime);
@@ -31,7 +32,8 @@ export default function Result() {
   const checkAuth      = useMatchStore((s) => s.checkAuth);
   const resetMatch     = useMatchStore((s) => s.resetMatch);
 
-  const setWinner  = useMatchStore((s) => s.setWinner);
+  const setWinner        = useMatchStore((s) => s.setWinner);
+  const applyFinalResult = useMatchStore((s) => s.applyFinalResult);
   const [ratingAfter, setRatingAfter] = useState(null);
 
   const userId = currentUser?._id;
@@ -50,8 +52,21 @@ export default function Result() {
       import("axios").then(({ default: axios }) => {
         axios.get(`${import.meta.env.VITE_API_URL}/api/match/${matchId}`, { withCredentials: true })
           .then(res => {
-            const w = res.data?.match?.winner
-            if (w != null) setWinner(w)
+            const match = res.data?.match
+            if (!match) return
+            if (match.winner != null) setWinner(match.winner)
+
+            // Reload landed straight on the result page with no match_result
+            // socket event ever received — hydrate stats/language from the
+            // authoritative server-side match snapshot instead of showing 0/0.
+            const myId  = useMatchStore.getState().currentUser?._id
+            const oppId = useMatchStore.getState().opponent?.userId
+            const mine  = match.playerA?.userId === myId ? match.playerA : match.playerB
+            const opp   = match.playerA?.userId === oppId ? match.playerA : match.playerB
+            applyFinalResult({
+              mine: mine ? { testsPassed: mine.testsPassed, totalTests: mine.totalTests } : null,
+              opp:  opp  ? { testsPassed: opp.testsPassed,  totalTests: opp.totalTests, language: opp.language } : null,
+            })
           })
           .catch(() => {})
       })
@@ -156,7 +171,7 @@ export default function Result() {
               testsPassed={oppTestsPassed}
               totalTests={oppTotalTests || totalTests}
               time="—"
-              language={null}
+              language={oppLanguage}
             />
           </div>
 
