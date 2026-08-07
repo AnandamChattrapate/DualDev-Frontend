@@ -397,11 +397,6 @@ export default function Home() {
           route: "/leaderboard",
         },
         {
-          label: "Pricing",
-          id:    null,
-          route: "/pricing",
-        },
-        {
           label: "Insights",
           id:    null,
           route: "/insights",
