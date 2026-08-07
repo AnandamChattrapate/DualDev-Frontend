@@ -198,6 +198,12 @@ export default function Leaderboard() {
             <span className="text-[16px] font-medium tracking-wide text-[var(--color-text-primary)]">
               Leaderboard
             </span>
+            <button
+              onClick={() => navigate('/insights')}
+              className="cursor-pointer text-[16px] font-medium tracking-wide text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-all duration-300"
+            >
+              Insights
+            </button>
           </div>
 
           <div className="flex items-center gap-4">

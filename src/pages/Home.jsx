@@ -55,6 +55,7 @@ export default function Home() {
   const [playersOnline, setPlayersOnline] = useState(0);
   const [battlesPlayed, setBattlesPlayed] = useState(0);
   const [battlesLiveNow, setBattlesLiveNow] = useState(0);
+  const [totalUsers, setTotalUsers] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -66,11 +67,12 @@ export default function Home() {
       if (!res.ok) throw new Error(`Network error: ${res.status}`);
       const data = await res.json();               // parse JSON *here*
       console.log("Stats data:", data);            // now log the actual data
-        
+
       // 3. Assign the received data to state variables
       setPlayersOnline(data.playersOnline);
       setBattlesPlayed(data.battlesPlayed);
       setBattlesLiveNow(data.battlesLiveNow);
+      setTotalUsers(data.totalUsers);
       setLoading(false);
     } catch (err) {
       setError(err.message);
@@ -78,12 +80,13 @@ export default function Home() {
     }
   };
 
-  // 4. Fetch on component mount and then poll every 5 seconds
+  // 4. Fetch on component mount and then poll every 4 seconds so online/live
+  // numbers feel real-time without hammering the API.
   useEffect(() => {
     fetchStats(); // initial fetch
-    const interval = setInterval(fetchStats, 10000); // refresh every 5s
+    const interval = setInterval(fetchStats, 4000); // refresh every 4s
     return () => clearInterval(interval); // cleanup
-  }, []); 
+  }, []);
 
     // ── HEARTBEAT for online tracking ──
   useEffect(() => {
@@ -397,6 +400,11 @@ export default function Home() {
           label: "Pricing",
           id:    null,
           route: "/pricing",
+        },
+        {
+          label: "Insights",
+          id:    null,
+          route: "/insights",
         }
       ].map((item) => (
 
@@ -822,8 +830,9 @@ export default function Home() {
       Stats unavailable — {error}
     </div>
   )}
-  <div className="max-w-5xl mx-auto grid grid-cols-5 divide-x divide-[var(--color-border)] py-10 px-6">
+  <div className="max-w-5xl mx-auto grid grid-cols-6 divide-x divide-[var(--color-border)] py-10 px-6">
     {[
+      [totalUsers, 'Total Users'],
       [playersOnline, 'Players Online'],
       [battlesPlayed, 'Battles Played'],
       [totalLanguages, 'Languages'],

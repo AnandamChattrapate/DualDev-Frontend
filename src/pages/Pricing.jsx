@@ -87,6 +87,12 @@ export default function Pricing() {
           </div>
           <div className="flex items-center gap-4">
             <button
+              onClick={() => navigate('/insights')}
+              className="cursor-pointer text-[15px] font-medium tracking-wide text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-all duration-300"
+            >
+              Insights
+            </button>
+            <button
               onClick={toggleTheme}
               aria-label="Toggle theme"
               className="cursor-pointer h-10 w-10 flex items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)] transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[#00FF85]"

@@ -9,6 +9,7 @@ import Match from "./pages/Match"
 import Result from "./pages/Result"
 import Leaderboard from "./pages/Leaderboard"
 import Pricing from "./pages/Pricing"
+import Insights from "./pages/Insights"
 import Login from "./components/auth/login"
 import useThemeStore from "./store/themeStore.js"
 
@@ -37,6 +38,7 @@ function App() {
         { path: "result/:matchId", element: <Result /> },
         { path: "leaderboard",     element: <Leaderboard /> },
         { path: "pricing",         element: <Pricing /> },
+        { path: "insights",        element: <Insights /> },
       ],
     },
   ])
