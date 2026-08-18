@@ -138,7 +138,7 @@ export default function Result() {
               label="YOU"
               color="#00FF85"
               testsPassed={myTestsPassed}
-              totalTests={myTotalTests || totalTests}
+              totalTests={myTotalTests}
               time={formatDuration(matchDuration)}
               language={myLanguage}
             />
@@ -169,7 +169,7 @@ export default function Result() {
               label="OPPONENT"
               color="#FF7A00"
               testsPassed={oppTestsPassed}
-              totalTests={oppTotalTests || totalTests}
+              totalTests={oppTotalTests}
               time="—"
               language={oppLanguage}
             />
