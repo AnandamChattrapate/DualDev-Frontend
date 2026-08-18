@@ -11,7 +11,7 @@ const DEFAULT_STARTER = {
 }
 
 const MATCH_DURATION = {
-  Easy:   900,
+  Easy:   120, // TEMP: shortened for faster testing of the match-end pipeline, revert to 900 after — must match backend's MATCH_DURATION_SECONDS.Easy
   Medium: 1500,
   Hard:   2400,
 }
