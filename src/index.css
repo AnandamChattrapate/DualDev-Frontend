@@ -81,3 +81,23 @@ body {
 [data-theme="light"] .dot-grid {
   background-image: radial-gradient(circle, rgba(0,0,0,0.06) 1px, transparent 1px) !important;
 }
+
+/* "Dark mockup" panels (How It Works step previews, the Private Room
+   preview card) are deliberately styled as permanently-dark device
+   screenshots — bg-black/40 over the page background, not content meant to
+   follow the page theme. At 40% opacity the light page bleeds through into
+   a washed-out gray, and the light-mode text-flip rules above (meant for
+   ordinary page content) turn their text dark too — dark-on-washed-gray,
+   unreadable. Make the panel itself solidly dark in light mode and
+   re-flip its own descendants back to their real dark-mode colors. */
+[data-theme="light"] .bg-black\/40 {
+  background-color: rgba(10,10,10,0.94) !important;
+}
+[data-theme="light"] .bg-black\/40 .bg-white\/\[0\.03\] { background-color: rgba(255,255,255,0.03) !important; }
+[data-theme="light"] .bg-black\/40 .border-white\/5     { border-color: rgba(255,255,255,0.05) !important; }
+[data-theme="light"] .bg-black\/40 .border-white\/10    { border-color: rgba(255,255,255,0.10) !important; }
+[data-theme="light"] .bg-black\/40 .text-white\/90      { color: rgba(255,255,255,0.90) !important; }
+[data-theme="light"] .bg-black\/40 .text-white\/50      { color: rgba(255,255,255,0.50) !important; }
+[data-theme="light"] .bg-black\/40 .text-white\/45      { color: rgba(255,255,255,0.45) !important; }
+[data-theme="light"] .bg-black\/40 .text-white\/40      { color: rgba(255,255,255,0.40) !important; }
+[data-theme="light"] .bg-black\/40 .text-white\/35      { color: rgba(255,255,255,0.35) !important; }

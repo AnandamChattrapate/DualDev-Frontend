@@ -1105,7 +1105,7 @@ export default function Home() {
 
                 </div>
 
-                <div className="space-y-1 font-mono-display text-[11px] text-[var(--color-text-primary)]">
+                <div className="space-y-1 font-mono-display text-[11px] text-white/90">
 
                   <div>def two_sum(nums, target):</div>
                   <div>    seen = {}</div>
@@ -1131,7 +1131,7 @@ export default function Home() {
 
                 </div>
 
-                <div className="space-y-1 font-mono-display text-[11px] text-[var(--color-text-secondary)]">
+                <div className="space-y-1 font-mono-display text-[11px] text-white/50">
 
                   <div>def ▓▓▓▓▓▓(▓▓▓▓, ▓▓▓▓▓▓):</div>
                   <div>    ▓▓▓▓ = {'{}'}</div>
@@ -1231,7 +1231,7 @@ export default function Home() {
 
               <div>
 
-                <div className="text-[var(--color-text-primary)] font-semibold text-lg">
+                <div className="text-white/90 font-semibold text-lg">
                   AI Match Review
                 </div>
 
@@ -1262,7 +1262,7 @@ export default function Home() {
                     {label}
                   </span>
 
-                  <span className="text-[var(--color-text-primary)] text-sm font-medium">
+                  <span className="text-white/90 text-sm font-medium">
                     {value}
                   </span>
 
@@ -1552,7 +1552,7 @@ export default function Home() {
 
             <div>
 
-              <div className="text-[var(--color-text-primary)] text-sm font-medium">
+              <div className="text-white/90 text-sm font-medium">
                 Private Room
               </div>
 
