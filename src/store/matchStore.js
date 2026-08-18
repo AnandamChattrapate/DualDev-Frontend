@@ -163,6 +163,17 @@ const useMatchStore = create(
           isSearching:     false,
           aiReview:        null,
         }))
+
+        // currentUser.rating can be stale here — e.g. right after a fast
+        // back-to-back rematch, before the previous match's result page
+        // ever ran its own checkAuth() refresh. Refresh it now so the
+        // eventual before/after diff on the result page reflects the
+        // server's true rating, not a stale client cache. This resolves
+        // well before any match can actually end (minimum match length
+        // is well over a minute), so it never delays match start itself.
+        get().checkAuth().then(() => {
+          set({ myRatingBefore: get().currentUser?.rating ?? null })
+        })
       },
 
       setTimeLeftFromServer: (timeLeft) => set({ timeLeft }),
