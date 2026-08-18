@@ -347,8 +347,6 @@ export default function Match() {
   /* Issue 4 — offline detection */
   const [networkOffline,   setNetworkOffline]   = useState(false)
   const [showBackOnline,   setShowBackOnline]   = useState(false)
-  /* Issue 5 — guards fallback navigation so we only fire it once */
-  const matchResultReceived = useRef(false)
   /* Which sub-section of the problem panel the user is currently looking at. */
   const [activeProblemTab, setActiveProblemTab] = useState("description")
 
@@ -553,7 +551,6 @@ export default function Match() {
     socket.on("opponent_tokens", ({ tokens }) => { setOppSilhouette(tokens) })
     socket.on("opponent_emote",     ({ emote })                            => { setIncomingEmote(emote); setShowEmotePopup(emote); setTimeout(() => setShowEmotePopup(null), 2400) })
     socket.on("match_result", ({ winnerId, aiReview, players }) => {
-      matchResultReceived.current = true
       setMatchEndTime(Date.now())
       setWinner(winnerId)
       if (aiReview) setAIReview(aiReview)
@@ -593,14 +590,12 @@ export default function Match() {
       submissionCount: useMatchStore.getState().submissionCount,
       aiUsageCount:    useMatchStore.getState().aiUsageCount,
     })
-    /* Issue 5 — if match_result socket never arrives (network blip, server
-       delay) navigate to results after 8 s so user isn't stranded. */
-    setTimeout(() => {
-      if (!matchResultReceived.current) {
-        setMatchEndTime(Date.now())
-        navigate(`/result/${matchId}`)
-      }
-    }, 8000)
+    // Navigate immediately instead of sitting on a frozen match screen while
+    // the server judges the match (AI call + settle delay can take a few
+    // seconds) — Result.jsx owns the "evaluating" loading state and picks up
+    // match_result itself (via its own socket listener + a REST fallback),
+    // since this page unmounts right after this call.
+    navigate(`/result/${matchId}`)
   }, [matchId, userId, myCode, myLanguage, matchEnded, navigate])
 
   const runCode = async () => {

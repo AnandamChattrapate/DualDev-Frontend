@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
+import axios from "axios";
 import useMatchStore from "../store/matchStore";
+import socket from "../socket/socket";
 
 // Formats seconds into "Xm Ys" or "—" if unknown
 function formatDuration(ms) {
@@ -11,82 +14,207 @@ function formatDuration(ms) {
   return m > 0 ? `${m}m ${s}s` : `${s}s`
 }
 
+const EVAL_MESSAGES = [
+  "Evaluating your code…",
+  "Running final test cases…",
+  "Consulting the AI judge…",
+  "Calculating rating changes…",
+  "Almost there…",
+]
+
+// Full-screen loading state shown between "match ended" and "we have a
+// verdict" — replaces what used to be a dead-air wait on the match screen.
+function EvaluatingScreen() {
+  const [msgIndex, setMsgIndex] = useState(0)
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setMsgIndex((i) => (i + 1) % EVAL_MESSAGES.length)
+    }, 1800)
+    return () => clearInterval(id)
+  }, [])
+
+  return (
+    <div className="min-h-screen bg-[#0A0A0A] text-white flex items-center justify-center px-6 overflow-hidden">
+      <div className="fixed inset-0 bg-[radial-gradient(circle_at_top,rgba(0,255,133,0.08),transparent_45%)] pointer-events-none" />
+      <div className="relative z-10 text-center">
+        <h1 className="font-claude text-[32px] font-bold tracking-[-2px] mb-10">
+          <span className="text-white">Dual</span>
+          <span className="text-[#F4B183]">Dev</span>
+        </h1>
+
+        <div className="relative w-20 h-20 mx-auto mb-8">
+          <div className="absolute inset-0 rounded-full border-4 border-white/10" />
+          <div className="absolute inset-0 rounded-full border-4 border-t-[#00FF85] border-r-transparent border-b-transparent border-l-transparent animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center text-2xl">🤖</div>
+        </div>
+
+        <div className="min-h-[28px] flex items-center justify-center px-4">
+          <AnimatePresence mode="wait">
+            <motion.p
+              key={msgIndex}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.35 }}
+              className="text-white/70 text-lg whitespace-nowrap"
+            >
+              {EVAL_MESSAGES[msgIndex]}
+            </motion.p>
+          </AnimatePresence>
+        </div>
+
+        <div className="mt-8 flex items-center justify-center gap-1.5">
+          {EVAL_MESSAGES.map((_, i) => (
+            <span
+              key={i}
+              className="w-1.5 h-1.5 rounded-full transition-all duration-300"
+              style={{ backgroundColor: i === msgIndex ? "#00FF85" : "rgba(255,255,255,0.15)" }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Result() {
   const { matchId } = useParams();
   const navigate    = useNavigate();
 
-  const currentUser    = useMatchStore((s) => s.currentUser);
-  const opponent       = useMatchStore((s) => s.opponent);
-  const winner         = useMatchStore((s) => s.winner);
-  const aiReview       = useMatchStore((s) => s.aiReview);
-  const myTestsPassed  = useMatchStore((s) => s.myTestsPassed);
-  const myTotalTests   = useMatchStore((s) => s.myTotalTests);
-  const oppTestsPassed = useMatchStore((s) => s.oppTestsPassed);
-  const oppTotalTests  = useMatchStore((s) => s.oppTotalTests);
-  const myLanguage     = useMatchStore((s) => s.myLanguage);
-  const oppLanguage    = useMatchStore((s) => s.oppLanguage);
-  const myCode         = useMatchStore((s) => s.codeByLanguage[s.myLanguage]);
-  const myRatingBefore = useMatchStore((s) => s.myRatingBefore);
-  const matchStartTime = useMatchStore((s) => s.matchStartTime);
-  const matchEndTime   = useMatchStore((s) => s.matchEndTime);
-  const checkAuth      = useMatchStore((s) => s.checkAuth);
-  const resetMatch     = useMatchStore((s) => s.resetMatch);
+  const currentUser     = useMatchStore((s) => s.currentUser);
+  const opponent        = useMatchStore((s) => s.opponent);
+  const winner          = useMatchStore((s) => s.winner);
+  const aiReview        = useMatchStore((s) => s.aiReview);
+  const myTestsPassed   = useMatchStore((s) => s.myTestsPassed);
+  const myTotalTests    = useMatchStore((s) => s.myTotalTests);
+  const oppTestsPassed  = useMatchStore((s) => s.oppTestsPassed);
+  const oppTotalTests   = useMatchStore((s) => s.oppTotalTests);
+  const oppLanguage     = useMatchStore((s) => s.oppLanguage);
+  const finalOppUsername = useMatchStore((s) => s.finalOppUsername);
+  const finalMyCode     = useMatchStore((s) => s.finalMyCode);
+  const finalMyLanguage = useMatchStore((s) => s.finalMyLanguage);
+  const myRatingBefore  = useMatchStore((s) => s.myRatingBefore);
+  const myRatingAfter   = useMatchStore((s) => s.myRatingAfter);
+  const matchStartTime  = useMatchStore((s) => s.matchStartTime);
+  const matchEndTime    = useMatchStore((s) => s.matchEndTime);
+  const checkAuth       = useMatchStore((s) => s.checkAuth);
+  const resetMatch      = useMatchStore((s) => s.resetMatch);
 
-  const setWinner        = useMatchStore((s) => s.setWinner);
-  const applyFinalResult = useMatchStore((s) => s.applyFinalResult);
-  const [ratingAfter, setRatingAfter] = useState(null);
+  const setWinner          = useMatchStore((s) => s.setWinner);
+  const setAIReview        = useMatchStore((s) => s.setAIReview);
+  const setMatchEndTime    = useMatchStore((s) => s.setMatchEndTime);
+  const applyFinalResult   = useMatchStore((s) => s.applyFinalResult);
+
+  // Only used as a last-resort fallback if the backend never provided an
+  // authoritative myRatingAfter (e.g. the error-path payload with no stats).
+  const [fallbackRatingAfter, setFallbackRatingAfter] = useState(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const userId = currentUser?._id;
   const iWon   = winner != null && winner !== "draw" && winner === userId;
   const isDraw = winner === "draw";
   const iLost  = winner != null && !iWon && !isDraw;
 
-  // Re-fetch user so we have the updated post-match rating
-  // Also fetch match result from server if winner wasn't set (8s fallback navigation)
   useEffect(() => {
     checkAuth().then((res) => {
-      if (res?.payload?.rating != null) setRatingAfter(res.payload.rating)
+      if (res?.payload?.rating != null) setFallbackRatingAfter(res.payload.rating)
     })
 
-    if (winner == null && matchId) {
-      import("axios").then(({ default: axios }) => {
-        axios.get(`${import.meta.env.VITE_API_URL}/api/match/${matchId}`, { withCredentials: true })
-          .then(res => {
-            const match = res.data?.match
-            if (!match) return
-            if (match.winner != null) setWinner(match.winner)
-
-            // Reload landed straight on the result page with no match_result
-            // socket event ever received — hydrate stats/language from the
-            // authoritative server-side match snapshot instead of showing 0/0.
-            const myId  = useMatchStore.getState().currentUser?._id
-            const oppId = useMatchStore.getState().opponent?.userId
-            const mine  = match.playerA?.userId === myId ? match.playerA : match.playerB
-            const opp   = match.playerA?.userId === oppId ? match.playerA : match.playerB
-            applyFinalResult({
-              mine: mine ? { testsPassed: mine.testsPassed, totalTests: mine.totalTests } : null,
-              opp:  opp  ? { testsPassed: opp.testsPassed,  totalTests: opp.totalTests, language: opp.language } : null,
-            })
-          })
-          .catch(() => {})
-      })
+    // Catch match_result if it arrives after we've already navigated here
+    // (Match.jsx's own listener is gone by then — that page unmounted).
+    const onMatchResult = ({ winnerId, aiReview: review, players }) => {
+      setMatchEndTime(Date.now())
+      setWinner(winnerId)
+      if (review) setAIReview(review)
+      if (players) {
+        const myId  = useMatchStore.getState().currentUser?._id
+        const oppId = useMatchStore.getState().opponent?.userId
+        applyFinalResult({ mine: myId ? players[myId] : null, opp: oppId ? players[oppId] : null })
+      }
     }
+    socket.on("match_result", onMatchResult)
+
+    // Belt-and-suspenders REST fallback in case the socket event is missed
+    // entirely (dropped connection, reload landing straight on this page).
+    // The backend's match-end processing (settle delay + AI judge call) can
+    // take a few seconds, so poll a few times rather than trying once.
+    let cancelled = false
+    let attempts = 0
+    const maxAttempts = 10
+    const pollMatch = () => {
+      if (cancelled || useMatchStore.getState().winner != null) return
+      attempts += 1
+      axios.get(`${import.meta.env.VITE_API_URL}/api/match/${matchId}`, { withCredentials: true })
+        .then(res => {
+          const match = res.data?.match
+          if (!match || match.winner == null) {
+            if (attempts < maxAttempts) setTimeout(pollMatch, 1500)
+            else if (!cancelled) setLoadFailed(true)
+            return
+          }
+          setWinner(match.winner)
+          setMatchEndTime(Date.now())
+
+          const myId  = useMatchStore.getState().currentUser?._id
+          const oppId = useMatchStore.getState().opponent?.userId
+          const mine  = match.playerA?.userId === myId ? match.playerA : match.playerB
+          const opp   = match.playerA?.userId === oppId ? match.playerA : match.playerB
+          applyFinalResult({
+            mine: mine ? { testsPassed: mine.testsPassed, totalTests: mine.totalTests, code: mine.code, language: mine.language } : null,
+            opp:  opp  ? { testsPassed: opp.testsPassed,  totalTests: opp.totalTests,  language: opp.language } : null,
+          })
+        })
+        .catch(() => {
+          if (attempts < maxAttempts) setTimeout(pollMatch, 1500)
+          else if (!cancelled) setLoadFailed(true)
+        })
+    }
+    if (winner == null && matchId) pollMatch()
 
     // Remove CSS variables that Match.jsx injected so layout renders normally
     const vars = ["--bg","--s1","--s2","--border","--text","--muted",
                   "--accent","--accent-dim","--accent-rgb","--danger","--warn","--logo"]
     vars.forEach(v => document.documentElement.style.removeProperty(v))
 
-    return () => { useMatchStore.getState().resetMatch() }
+    return () => {
+      cancelled = true
+      socket.off("match_result", onMatchResult)
+      useMatchStore.getState().resetMatch()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const ratingBefore = myRatingBefore ?? currentUser?.rating ?? null
-  const ratingDiff   = (ratingAfter != null && ratingBefore != null) ? ratingAfter - ratingBefore : null
+  const ratingBefore  = myRatingBefore ?? currentUser?.rating ?? null
+  const ratingAfter   = myRatingAfter  ?? fallbackRatingAfter
+  const ratingDiff    = (ratingAfter != null && ratingBefore != null) ? ratingAfter - ratingBefore : null
   const matchDuration = (matchEndTime && matchStartTime) ? matchEndTime - matchStartTime : null
 
-  const totalTests = myTotalTests || oppTotalTests || 0
+  const myLanguage  = finalMyLanguage || useMatchStore.getState().myLanguage
+  const myCode      = finalMyCode
+  const totalTests  = myTotalTests || oppTotalTests || 0
 
   const handleHome = () => { resetMatch(); navigate("/") }
+
+  if (winner == null && !loadFailed) {
+    return <EvaluatingScreen />
+  }
+
+  if (winner == null && loadFailed) {
+    return (
+      <div className="min-h-screen bg-[#0A0A0A] text-white flex items-center justify-center px-6">
+        <div className="text-center">
+          <div className="text-5xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold mb-2">Couldn't load your result</h2>
+          <p className="text-white/50 mb-8">The match may still be processing. Try refreshing, or head back home.</p>
+          <div className="flex items-center justify-center gap-4">
+            <button onClick={() => window.location.reload()} className="h-12 px-6 rounded-xl bg-[#00FF85] text-black font-semibold">Retry</button>
+            <button onClick={handleHome} className="h-12 px-6 rounded-xl border border-white/10 text-white font-semibold">Home</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const resultEmoji = iWon ? "🏆" : iLost ? "💀" : "🤝"
   const resultText  = iWon ? "YOU WON" : iLost ? "YOU LOST" : "DRAW"
@@ -108,9 +236,6 @@ export default function Result() {
             <span className="text-white">Dual</span>
             <span className="text-[#F4B183]">Dev</span>
           </h1>
-          <div className="px-4 py-2 rounded-full border border-white/10 bg-white/[0.03] text-white/40 text-sm">
-            Match #{matchId?.slice(0, 6)}
-          </div>
         </div>
 
         <div className="bg-[#101010]/90 border border-white/10 rounded-[32px] p-10 backdrop-blur-2xl shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
@@ -165,7 +290,7 @@ export default function Result() {
             </div>
 
             <PlayerCard
-              player={opponent}
+              player={{ ...opponent, username: finalOppUsername || opponent?.username }}
               label="OPPONENT"
               color="#FF7A00"
               testsPassed={oppTestsPassed}

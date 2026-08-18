@@ -32,7 +32,20 @@ const useMatchStore = create(
       winner:         null,
       timeLeft:       900,
       myRatingBefore: null, // rating snapshot taken at match start, used to show the diff on result page
+      myRatingAfter:  null, // authoritative post-match rating from the backend's match_result payload
       matchEndTime:   null, // set when match_result arrives, used for time-taken display
+
+      // Snapshotted once when match_result data lands (applyFinalResult), decoupled
+      // from the live myLanguage/codeByLanguage below — a subsequent match's
+      // initMatch() resets those for the NEW match, which would otherwise silently
+      // clobber what the result page is still displaying for the PREVIOUS match.
+      finalMyCode:     null,
+      finalMyLanguage: null,
+      // Opponent's username straight from the backend's match-end lookup —
+      // some join paths (e.g. friend-room matches) can populate the live
+      // `opponent` object below incompletely; this is always reliable once
+      // match_result data lands.
+      finalOppUsername: null,
 
       problem: null,
 
@@ -247,13 +260,20 @@ const useMatchStore = create(
 
       // Authoritative final stats from the server's match_result event — overrides
       // whatever was pieced together from live socket events, which may have been
-      // missed on reload or late join.
+      // missed on reload or late join. Also the single source of truth for the
+      // rating diff (server's ratingBefore/ratingAfter beat any client snapshot)
+      // and for a code/language snapshot that can't be clobbered by a later match.
       applyFinalResult: ({ mine, opp }) => set((state) => ({
-        myTestsPassed:  mine?.testsPassed ?? state.myTestsPassed,
-        myTotalTests:   mine?.totalTests  ?? state.myTotalTests,
-        oppTestsPassed: opp?.testsPassed  ?? state.oppTestsPassed,
-        oppTotalTests:  opp?.totalTests   ?? state.oppTotalTests,
-        oppLanguage:    opp?.language     ?? state.oppLanguage,
+        myTestsPassed:   mine?.testsPassed  ?? state.myTestsPassed,
+        myTotalTests:    mine?.totalTests   ?? state.myTotalTests,
+        oppTestsPassed:  opp?.testsPassed   ?? state.oppTestsPassed,
+        oppTotalTests:   opp?.totalTests    ?? state.oppTotalTests,
+        oppLanguage:     opp?.language      ?? state.oppLanguage,
+        finalOppUsername: opp?.username     ?? state.finalOppUsername,
+        finalMyCode:     mine?.code         ?? state.codeByLanguage[state.myLanguage] ?? null,
+        finalMyLanguage: mine?.language     ?? state.myLanguage ?? null,
+        myRatingBefore:  mine?.ratingBefore ?? state.myRatingBefore,
+        myRatingAfter:   mine?.ratingAfter  ?? state.myRatingAfter,
       })),
 
       setAIReview: (review) => set({ aiReview: review }),
@@ -273,6 +293,10 @@ const useMatchStore = create(
           winner:          null,
           timeLeft:        900,
           myRatingBefore:  null,
+          myRatingAfter:   null,
+          finalMyCode:      null,
+          finalMyLanguage:  null,
+          finalOppUsername: null,
           matchEndTime:    null,
           problem:         null,
           myLanguage:      'python',
@@ -336,6 +360,10 @@ const useMatchStore = create(
         aiUsageLeft:     state.aiUsageLeft,
         matchStartTime:  state.matchStartTime,
         myRatingBefore:  state.myRatingBefore,
+        myRatingAfter:   state.myRatingAfter,
+        finalMyCode:      state.finalMyCode,
+        finalMyLanguage:  state.finalMyLanguage,
+        finalOppUsername: state.finalOppUsername,
         matchEndTime:    state.matchEndTime,
       }),
     }
