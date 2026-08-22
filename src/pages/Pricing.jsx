@@ -95,13 +95,13 @@ export default function Pricing() {
             <button
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              className="cursor-pointer h-10 w-10 flex items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)] transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[#00FF85]"
+              className="cursor-pointer h-10 w-10 flex items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)] transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[var(--color-accent-green)]"
             >
               {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
             <button
               onClick={() => navigate(isAuthenticated ? '/' : '/login')}
-              className="cursor-pointer h-11 px-6 rounded-full bg-[#00FF85] text-black text-sm font-semibold hover:brightness-110 transition-all"
+              className="cursor-pointer h-11 px-6 rounded-full bg-[var(--color-accent-green)] text-black text-sm font-semibold hover:brightness-110 transition-all"
             >
               {isAuthenticated ? 'Back Home' : 'Login'}
             </button>
@@ -118,7 +118,7 @@ export default function Pricing() {
           className="font-mono-display font-bold leading-tight tracking-tight mb-4"
           style={{ fontSize: 'clamp(36px, 6vw, 64px)' }}
         >
-          Simple, fair <span className="text-[#00FF85]">pricing</span>.
+          Simple, fair <span className="text-[var(--color-accent-green)]">pricing</span>.
         </motion.h1>
         <motion.p
           initial={reducedMotion ? false : { opacity: 0, y: 20 }}
@@ -133,13 +133,13 @@ export default function Pricing() {
         <div className="inline-flex items-center gap-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-full px-2 py-2">
           <button
             onClick={() => setAnnual(false)}
-            className={`cursor-pointer px-5 py-2 rounded-full text-sm font-medium transition-all ${!annual ? 'bg-[#00FF85] text-black' : 'text-white/60'}`}
+            className={`cursor-pointer px-5 py-2 rounded-full text-sm font-medium transition-all ${!annual ? 'bg-[var(--color-accent-green)] text-black' : 'text-white/60'}`}
           >
             Monthly
           </button>
           <button
             onClick={() => setAnnual(true)}
-            className={`cursor-pointer px-5 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${annual ? 'bg-[#00FF85] text-black' : 'text-white/60'}`}
+            className={`cursor-pointer px-5 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2 ${annual ? 'bg-[var(--color-accent-green)] text-black' : 'text-white/60'}`}
           >
             Annual
             <span className="bg-[#FF7A00] text-black text-[10px] font-bold px-2 py-0.5 rounded-full">SAVE 25%</span>
@@ -160,12 +160,12 @@ export default function Pricing() {
               whileHover={{ scale: tier.featured ? 1.03 : 1.02 }}
               className={`relative rounded-[28px] p-8 border ${
                 tier.featured
-                  ? 'bg-[var(--color-surface)] border-[#00FF85]/40 shadow-[0_0_60px_rgba(0,255,133,0.08)] lg:-translate-y-4'
+                  ? 'bg-[var(--color-surface)] border-[var(--color-accent-green)]/40 shadow-[0_0_60px_rgba(0,255,133,0.08)] lg:-translate-y-4'
                   : 'bg-[var(--color-surface)] border-white/10'
               }`}
             >
               {tier.featured && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-[#00FF85] text-black text-[11px] font-bold tracking-widest uppercase px-4 py-1.5 rounded-full">
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-[var(--color-accent-green)] text-black text-[11px] font-bold tracking-widest uppercase px-4 py-1.5 rounded-full">
                   Most Popular
                 </div>
               )}
@@ -180,7 +180,7 @@ export default function Pricing() {
                   <div className="font-mono-display text-4xl font-bold">$0</div>
                 ) : (
                   <div className="flex items-baseline gap-1">
-                    <span className="font-mono-display text-4xl font-bold text-[#00FF85]">
+                    <span className="font-mono-display text-4xl font-bold text-[var(--color-accent-green)]">
                       ${annual ? tier.annual : tier.monthly}
                     </span>
                     <span className="text-white/40 text-sm">/ month</span>
@@ -190,9 +190,9 @@ export default function Pricing() {
 
               <button
                 onClick={() => navigate(tier.to)}
-                className={`cursor-pointer w-full py-3.5 rounded-xl font-mono-display font-bold text-xs tracking-widest mb-8 transition-all hover:brightness-110 hover:scale-[1.02] focus-visible:outline-2 focus-visible:outline-[#00FF85] ${
+                className={`cursor-pointer w-full py-3.5 rounded-xl font-mono-display font-bold text-xs tracking-widest mb-8 transition-all hover:brightness-110 hover:scale-[1.02] focus-visible:outline-2 focus-visible:outline-[var(--color-accent-green)] ${
                   tier.featured
-                    ? 'bg-[#00FF85] text-black'
+                    ? 'bg-[var(--color-accent-green)] text-black'
                     : 'bg-white/[0.05] border border-white/15 text-[var(--color-text-primary)]'
                 }`}
               >
@@ -203,7 +203,7 @@ export default function Pricing() {
                 {tier.features.map(([label, included]) => (
                   <li key={label} className="flex items-start gap-3 text-sm">
                     {included ? (
-                      <Check size={16} className="text-[#00FF85] shrink-0 mt-0.5" />
+                      <Check size={16} className="text-[var(--color-accent-green)] shrink-0 mt-0.5" />
                     ) : (
                       <X size={16} className="text-white/20 shrink-0 mt-0.5" />
                     )}

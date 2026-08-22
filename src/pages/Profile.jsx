@@ -6,7 +6,7 @@ import useThemeStore from '../store/themeStore'
 /* ────────────────────────────────────────────────────────────
    /profile
    Matches the visual language of Leaderboard.jsx:
-   var(--color-bg) bg, Space Mono display, #00FF85 accent, dot-grid.
+   var(--color-bg) bg, Space Mono display, themed green accent, dot-grid.
    Fields come straight from the authenticated user in matchStore
    (populated via /api/auth/me on load).
    ──────────────────────────────────────────────────────────── */
@@ -81,7 +81,7 @@ export default function Profile() {
               onClick={toggleTheme}
               aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
               title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
-              className="cursor-pointer h-10 w-10 flex items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)] transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[#00FF85]"
+              className="cursor-pointer h-10 w-10 flex items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)] transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[var(--color-accent-green)]"
             >
               {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
@@ -98,7 +98,7 @@ export default function Profile() {
             </p>
             <button
               onClick={() => navigate('/login')}
-              className="font-mono-display text-[13px] tracking-widest px-5 py-3 rounded-full bg-[#00FF85] text-black font-bold hover:brightness-95 transition"
+              className="font-mono-display text-[13px] tracking-widest px-5 py-3 rounded-full bg-[var(--color-accent-green)] text-black font-bold hover:brightness-95 transition"
             >
               LOG IN
             </button>
@@ -117,7 +117,7 @@ export default function Profile() {
               ) : (
                 <div
                   className="w-20 h-20 rounded-2xl flex items-center justify-center text-3xl font-bold border border-[var(--color-border)]"
-                  style={{ background: 'var(--color-surface-2)', color: '#00FF85' }}
+                  style={{ background: 'var(--color-surface-2)', color: 'var(--color-accent-green)' }}
                 >
                   {initial}
                 </div>
@@ -129,7 +129,7 @@ export default function Profile() {
                 <p className="text-[var(--color-text-muted)] text-sm">{currentUser.email}</p>
                 {currentUser.rank != null && (
                   <p className="text-sm mt-2">
-                    Rank <span className="text-[#00FF85] font-semibold">#{currentUser.rank}</span>
+                    Rank <span className="text-[var(--color-accent-green)] font-semibold">#{currentUser.rank}</span>
                   </p>
                 )}
               </div>

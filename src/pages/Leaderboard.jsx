@@ -7,7 +7,7 @@ import Navbar from '../components/layout/Navbar.jsx'
 /* ────────────────────────────────────────────────────────────
    /leaderboard
    Matches the visual language of Home.jsx:
-   var(--color-bg) bg, Space Mono display, #00FF85 accent, dot-grid.
+   var(--color-bg) bg, Space Mono display, themed green accent, dot-grid.
    Real data from /api/leaderboard/me (top 9 + your row).
    ──────────────────────────────────────────────────────────── */
 
@@ -16,7 +16,7 @@ const RANK_STYLES = {
   2: { color: '#9CA3AF', bg: 'rgba(156,163,175,0.08)', badge: 'Elite'    },
   3: { color: '#CD7F32', bg: 'rgba(205,127,50,0.08)',  badge: 'Master'   },
 }
-const DEFAULT_STYLE = { color: '#00FF85', bg: 'rgba(0,255,133,0.05)', badge: 'Diamond' }
+const DEFAULT_STYLE = { color: 'var(--color-accent-green)', bg: 'rgba(0,255,133,0.05)', badge: 'Diamond' }
 
 const styleFor = (rank) => (rank && RANK_STYLES[rank]) || DEFAULT_STYLE
 
@@ -35,7 +35,7 @@ function Row({ rank, username, rating, wins, losses, avatar, isMe }) {
   return (
     <div
       className={`grid grid-cols-[56px_1fr_90px_90px_120px] px-6 py-4 border-b border-[var(--color-surface)] items-center transition-colors ${
-        isMe ? 'bg-[#00FF85]/[0.04]' : 'hover:bg-white/[0.02]'
+        isMe ? 'bg-[var(--color-accent-green)]/[0.04]' : 'hover:bg-white/[0.02]'
       }`}
     >
       {/* Rank */}
@@ -60,7 +60,7 @@ function Row({ rank, username, rating, wins, losses, avatar, isMe }) {
           <div className="font-mono-display text-[13px] text-[var(--color-text-primary)] truncate flex items-center gap-2">
             @{username || 'unknown'}
             {isMe && (
-              <span className="font-mono-display text-[9px] tracking-widest border border-[#00FF85]/40 text-[#00FF85] px-1.5 py-0.5 rounded-sm">
+              <span className="font-mono-display text-[9px] tracking-widest border border-[var(--color-accent-green)]/40 text-[var(--color-accent-green)] px-1.5 py-0.5 rounded-sm">
                 YOU
               </span>
             )}
@@ -75,7 +75,7 @@ function Row({ rank, username, rating, wins, losses, avatar, isMe }) {
       <span className="font-mono-display text-[13px] text-[var(--color-text-secondary)] tabnum">🏆 {wins ?? 0}</span>
 
       {/* Win Rate */}
-      <span className="font-mono-display text-[13px] text-[#00FF85] tabnum">↗ {rate}</span>
+      <span className="font-mono-display text-[13px] text-[var(--color-accent-green)] tabnum">↗ {rate}</span>
 
       {/* Rating */}
       <span className="font-mono-display text-[13px] text-[var(--color-text-primary)] tabnum text-right">
@@ -284,11 +284,11 @@ export default function Leaderboard() {
               <span className="font-mono-display text-[10px] tracking-widest text-[var(--color-text-muted)]">
                 YOUR STANDING
               </span>
-              <span className="font-mono-display text-[10px] tracking-widest text-[#00FF85]">
+              <span className="font-mono-display text-[10px] tracking-widest text-[var(--color-accent-green)]">
                 #{me.rank ?? '—'} OF {total}
               </span>
             </div>
-            <div className="bg-[var(--color-surface)] border border-[#00FF85]/30 rounded-xl overflow-hidden me-row">
+            <div className="bg-[var(--color-surface)] border border-[var(--color-accent-green)]/30 rounded-xl overflow-hidden me-row">
               <Row
                 rank={me.rank ?? '—'}
                 username={me.username || currentUser?.username || 'You'}
@@ -311,7 +311,7 @@ export default function Leaderboard() {
           </div>
           <button
             onClick={() => navigate('/')}
-            className="font-mono-display text-[11px] tracking-widest text-[var(--color-text-secondary)] hover:text-[#00FF85] transition-colors"
+            className="font-mono-display text-[11px] tracking-widest text-[var(--color-text-secondary)] hover:text-[var(--color-accent-green)] transition-colors"
           >
             ← BACK TO HOME
           </button>

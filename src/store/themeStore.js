@@ -8,7 +8,7 @@ import { persist } from 'zustand/middleware'
 const useThemeStore = create(
   persist(
     (set, get) => ({
-      theme: 'dark', // 'dark' | 'light' — default dark per brand
+      theme: 'light', // 'dark' | 'light' — light is the app-wide default
 
       setTheme: (theme) => {
         set({ theme })

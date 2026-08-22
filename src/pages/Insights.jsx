@@ -12,7 +12,7 @@ import { displayMatches, displayUsers, formatStat } from '../lib/displayStats.js
    /insights
    Public platform analytics — matches the visual language of
    Home.jsx/Leaderboard.jsx: var(--color-bg) bg, Space Mono display,
-   #00FF85 accent, dot-grid header.
+   themed green accent, dot-grid header.
    ──────────────────────────────────────────────────────────── */
 
 const BASE_URL = import.meta.env.VITE_API_URL
@@ -23,7 +23,7 @@ function StatTile({ label, value, loading }) {
       {loading ? (
         <div className="h-[30px] w-16 mx-auto bg-[var(--color-surface-2)] rounded-md animate-pulse" />
       ) : (
-        <div className="font-mono-display text-[28px] font-bold text-[#00FF85] tracking-tight tabnum">
+        <div className="font-mono-display text-[28px] font-bold text-[var(--color-accent-green)] tracking-tight tabnum">
           {value}
         </div>
       )}
@@ -160,13 +160,13 @@ export default function Insights() {
               onClick={toggleTheme}
               aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
               title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
-              className="cursor-pointer h-10 w-10 flex items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)] transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[#00FF85]"
+              className="cursor-pointer h-10 w-10 flex items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)] transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[var(--color-accent-green)]"
             >
               {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
 
             <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)]">
-              <span className="w-2 h-2 rounded-full bg-[#00FF85] animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-[var(--color-accent-green)] animate-pulse" />
               {currentUser ? (
                 <span className="text-sm text-[var(--color-text-primary)]">{currentUser.username}</span>
               ) : (
@@ -381,7 +381,7 @@ export default function Insights() {
           </div>
           <button
             onClick={() => navigate('/')}
-            className="font-mono-display text-[11px] tracking-widest text-[var(--color-text-secondary)] hover:text-[#00FF85] transition-colors"
+            className="font-mono-display text-[11px] tracking-widest text-[var(--color-text-secondary)] hover:text-[var(--color-accent-green)] transition-colors"
           >
             ← BACK TO HOME
           </button>

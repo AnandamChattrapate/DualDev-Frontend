@@ -5,22 +5,11 @@
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
 /* ── Sitewide theme tokens ──────────────────────────────────────────
-   Brand colors stay fixed across themes: black bg / #00FF85 green /
-   #FF7A00 orange. Light theme reuses the same accent hues on a light
-   surface instead of inventing new brand colors. */
+   Light is the default: bare :root carries the light palette so the very
+   first paint (before the theme store rehydrates and stamps data-theme)
+   is light rather than a dark flash. Dark stays a full peer theme.
+   Brand accents keep the same hues in both, tuned for contrast. */
 :root,
-[data-theme="dark"] {
-  --color-bg:            #0A0A0A;
-  --color-surface:       #111111;
-  --color-surface-2:     #161616;
-  --color-border:        #2A2A2A;
-  --color-text-primary:  #E8E8E8;
-  --color-text-secondary:#888888;
-  --color-text-muted:    #555555;
-  --color-accent-green:  #00FF85;
-  --color-accent-orange: #FF7A00;
-}
-
 [data-theme="light"] {
   --color-bg:            #F5F4F0;
   --color-surface:       #FFFFFF;
@@ -33,9 +22,25 @@
   --color-accent-orange: #E06A00;
 }
 
+[data-theme="dark"] {
+  --color-bg:            #0A0A0A;
+  --color-surface:       #111111;
+  --color-surface-2:     #161616;
+  --color-border:        #2A2A2A;
+  --color-text-primary:  #E8E8E8;
+  --color-text-secondary:#888888;
+  --color-text-muted:    #555555;
+  --color-accent-green:  #00FF85;
+  --color-accent-orange: #FF7A00;
+}
+
 html {
   background-color: var(--color-bg);
-  color-scheme: light dark;
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 body {
