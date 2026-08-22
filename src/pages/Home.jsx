@@ -11,7 +11,15 @@ import Navbar from '../components/layout/Navbar.jsx'
 
 const MIN_MATCH_WIDTH = 768
 
-const TOPICS = ['Array', 'HashMap', 'String']
+const TOPICS = [
+  'Array', 'HashMap', 'String',
+  'Stack', 'LinkedList', 'Tree', 'Graph',
+  'DynamicProgramming', 'Greedy', 'BinarySearch', 'BitManipulation',
+]
+
+/* Values must stay exactly as stored on the problem documents; only the
+   display label gets the space. */
+const topicLabel = (t) => t.replace(/([a-z])([A-Z])/g, '$1 $2')
 const DIFFICULTIES = ['Easy', 'Medium', 'Hard']
 
 const QUOTE_BATCH = 6
@@ -1845,7 +1853,7 @@ export default function Home() {
           <div className="home-dialog search-dialog text-center">
             <p className="home-faint text-xs uppercase tracking-[0.16em] mb-2">Searching</p>
             <h2 className="home-display text-3xl mb-1">Finding opponent</h2>
-            <QueueRadar topic={topic} difficulty={difficulty} />
+            <QueueRadar topic={topicLabel(topic)} difficulty={difficulty} />
             <div className="mb-6">
               <div className="flex justify-between text-xs home-faint mb-2">
                 <span>Auto-cancel</span>
@@ -1957,7 +1965,7 @@ export default function Home() {
 
             <label className="home-faint text-xs uppercase tracking-[0.14em] block mb-2">Topic</label>
             <select className="home-select mb-4" value={topic} onChange={(e) => setTopic(e.target.value)}>
-              {TOPICS.map((t) => <option key={t} value={t}>{t}</option>)}
+              {TOPICS.map((t) => <option key={t} value={t}>{topicLabel(t)}</option>)}
             </select>
 
             <label className="home-faint text-xs uppercase tracking-[0.14em] block mb-2">Difficulty</label>

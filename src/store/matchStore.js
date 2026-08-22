@@ -11,7 +11,7 @@ const DEFAULT_STARTER = {
 }
 
 const MATCH_DURATION = {
-  Easy:   120, // TEMP: shortened for faster testing of the match-end pipeline, revert to 900 after — must match backend's MATCH_DURATION_SECONDS.Easy
+  Easy:   900, // must match backend's MATCH_DURATION_SECONDS.Easy
   Medium: 1500,
   Hard:   2400,
 }
@@ -72,7 +72,6 @@ const useMatchStore = create(
       oppTotalTests:  0,
       oppVerdict:     null,
       oppLanguage:    null,
-      oppTyping:      false,
       // Opponent's live presence: state = 'coding'|'reading'|'thinking'|'offline'|'unknown'
       // section = which part of the problem they're reading; online = socket connected
       oppPresence: {
@@ -88,16 +87,8 @@ const useMatchStore = create(
       activeHints:   [],
       firstBlood:    false,
       firstBloodBy:  null,
-      incomingEmote: null,
 
       aiReview: null,
-      // state
-      darkMode: true,
-
-      // actions
-      setDarkMode: (value) => set({ darkMode: value }),
-      toggleDarkMode: () =>
-        set((state) => ({ darkMode: !state.darkMode })),
 
       login: async (userCred) => {
         try {
@@ -167,11 +158,9 @@ const useMatchStore = create(
           oppTestsPassed:  0,
           oppTotalTests:   problem?.hiddenTestCases?.length || 0,
           oppVerdict:      null,
-          oppTyping:       false,
           oppPresence:     { state: 'unknown', section: null, lastEvent: 0, online: false },
           firstBlood:      false,
           firstBloodBy:    null,
-          incomingEmote:   null,
           activeHints:     [],
           isSearching:     false,
           aiReview:        null,
@@ -228,8 +217,6 @@ const useMatchStore = create(
 
       setOppSilhouette: (silhouette) => set({ oppSilhouette: silhouette }),
 
-      setOppTyping: (val) => set({ oppTyping: val }),
-
       setOppPresence: ({ state, section }) => set((s) => ({
         oppPresence: {
           state:     state || s.oppPresence.state,
@@ -280,11 +267,6 @@ const useMatchStore = create(
 
       revealHint: (index) => set((state) => ({ activeHints: [...state.activeHints, index] })),
 
-      setIncomingEmote: (emote) => {
-        set({ incomingEmote: emote })
-        setTimeout(() => set({ incomingEmote: null }), 2500)
-      },
-
       // Clears all match state and wipes localStorage, preserving auth
       resetMatch: () => {
         set({
@@ -319,10 +301,8 @@ const useMatchStore = create(
           oppTestsPassed:  0,
           oppTotalTests:   0,
           oppVerdict:      null,
-          oppTyping:       false,
           firstBlood:      false,
           firstBloodBy:    null,
-          incomingEmote:   null,
           activeHints:     [],
           isSearching:     false,
           aiReview:        null,

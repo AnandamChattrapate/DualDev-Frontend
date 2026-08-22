@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import useMatchStore from "../../store/matchStore"
-import { IconEye, IconEyeOff } from "./icons"
+import useThemeStore from "../../store/themeStore"
+import { IconEye, IconEyeOff, IconChat } from "./icons"
 
 /* Map presence + section → human label + style hints. */
 const SECTION_LABEL = {
@@ -30,8 +31,8 @@ function describePresence(presence) {
   return { text: "IDLE", color: "var(--muted)", tone: "thinking" }
 }
 
-export default function OpponentPanel({ opponent, oppSilhouette, oppTestsPassed, oppTotalTests, width }) {
-  const darkMode    = useMatchStore((s) => s.darkMode)
+export default function OpponentPanel({ opponent, oppSilhouette, oppTestsPassed, oppTotalTests, width, messages = [], onOpenChat }) {
+  const darkMode    = useThemeStore((s) => s.theme) === "dark"
   const oppPresence = useMatchStore((s) => s.oppPresence)
   const pct = oppTotalTests > 0 ? (oppTestsPassed / oppTotalTests) * 100 : 0
   const [collapsed, setCollapsed] = useState(false)
@@ -70,28 +71,27 @@ export default function OpponentPanel({ opponent, oppSilhouette, oppTestsPassed,
         {!collapsed && (
           <>
             <div style={{
-              width: 26, height: 26, borderRadius: 8, flexShrink: 0,
+              width: 26, height: 26, borderRadius: 6, flexShrink: 0,
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontFamily: "var(--mono)", fontWeight: 700, fontSize: 15,
-              background: "rgba(255,68,68,0.1)", color: "var(--danger)", border: "1px solid rgba(255,68,68,0.25)",
+              fontFamily: "var(--mono)", fontWeight: 700, fontSize: 13,
+              background: "var(--s1)", color: "var(--text-2)", border: "1px solid var(--border)",
             }}>
               {opponent?.username?.[0]?.toUpperCase() || "O"}
             </div>
             <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-              <span className="label" style={{ fontSize: 15, textTransform: "none", letterSpacing: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <span className="label" style={{ fontSize: 14, textTransform: "none", letterSpacing: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {opponent?.username || "Opponent"}
               </span>
               {opponent?.rating != null && (
-                <span style={{ fontFamily: "var(--mono)", fontSize: 13, color: "var(--accent)" }}>{opponent.rating} ELO</span>
+                <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--muted)", letterSpacing: "0.06em" }}>{opponent.rating} ELO</span>
               )}
             </div>
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5 }}>
               <span style={{
-                width: 7, height: 7, borderRadius: "50%",
+                width: 6, height: 6, borderRadius: "50%",
                 background: effective.online ? "var(--accent)" : "var(--danger)",
-                animation: effective.online ? "pulse-green 2s ease-in-out infinite" : "pulse-red 1.2s ease-in-out infinite",
               }} />
-              <span style={{ fontFamily: "var(--mono)", fontSize: 12, letterSpacing: "0.16em", color: "var(--muted)" }}>
+              <span style={{ fontFamily: "var(--mono)", fontSize: 10, letterSpacing: "0.14em", color: "var(--muted)" }}>
                 {effective.online ? "LIVE" : "OFFLINE"}
               </span>
             </div>
@@ -114,31 +114,25 @@ export default function OpponentPanel({ opponent, oppSilhouette, oppTestsPassed,
           {/* ── Progress ── */}
           <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
-              <span style={{ fontFamily: "var(--mono)", fontSize: 13, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--muted)" }}>Progress</span>
-              <span className="tabnum" style={{ fontFamily: "var(--mono)", fontSize: 16, fontWeight: 700, color: pct === 100 ? "var(--accent)" : "var(--text)" }}>
+              <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--muted)" }}>Progress</span>
+              <span className="tabnum" style={{ fontFamily: "var(--mono)", fontSize: 14, fontWeight: 700, color: pct === 100 ? "var(--accent)" : "var(--text)" }}>
                 {oppTestsPassed}/{oppTotalTests}
               </span>
             </div>
-            <div style={{ height: 7, borderRadius: 6, overflow: "hidden", background: "var(--s2)" }}>
+            <div style={{ height: 4, borderRadius: 3, overflow: "hidden", background: "var(--s2)" }}>
               <div
                 className="progress-bar-fill"
-                style={{
-                  height: "100%", borderRadius: 6, width: `${pct}%`,
-                  background: pct === 100
-                    ? "linear-gradient(90deg, var(--accent), var(--accent-dim))"
-                    : `rgba(var(--accent-rgb),${pct > 50 ? 0.8 : 0.45})`,
-                  boxShadow: pct === 100 ? "0 0 10px rgba(var(--accent-rgb),0.6)" : "none",
-                }}
+                style={{ height: "100%", borderRadius: 3, width: `${pct}%`, background: "var(--accent)" }}
               />
             </div>
-            <div style={{ display: "flex", gap: 4, marginTop: 7 }}>
+            <div style={{ display: "flex", gap: 3, marginTop: 7 }}>
               {Array.from({ length: oppTotalTests || 6 }).map((_, i) => (
                 <div
                   key={i}
                   style={{
-                    flex: 1, height: 4, borderRadius: 4,
+                    flex: 1, height: 3, borderRadius: 2,
                     background: i < oppTestsPassed ? "var(--accent)" : "var(--s2)",
-                    transition: "background 0.3s ease", transitionDelay: `${i * 50}ms`,
+                    transition: "background 0.3s ease",
                   }}
                 />
               ))}
@@ -149,11 +143,6 @@ export default function OpponentPanel({ opponent, oppSilhouette, oppTestsPassed,
           <div style={{
             padding: "9px 12px", borderBottom: "1px solid var(--border)", flexShrink: 0,
             display: "flex", alignItems: "center", gap: 10,
-            transition: "background 0.4s ease",
-            background: label.tone === 'coding'   ? "rgba(var(--accent-rgb),0.05)"
-                     : label.tone === 'reading'  ? "rgba(96,165,250,0.06)"
-                     : label.tone === 'offline'  ? "rgba(255,68,68,0.07)"
-                     : "transparent",
           }}>
             {label.tone === 'coding' ? (
               <>
@@ -163,20 +152,14 @@ export default function OpponentPanel({ opponent, oppSilhouette, oppTestsPassed,
               </>
             ) : (
               <span style={{
-                width: 7, height: 7, borderRadius: "50%",
+                width: 6, height: 6, borderRadius: "50%",
                 background: label.color,
-                boxShadow: label.tone === 'offline' ? `0 0 0 0 ${label.color}` : `0 0 8px ${label.color}`,
-                animation:
-                  label.tone === 'thinking' ? "shimmer-block 1.8s ease-in-out infinite"
-                : label.tone === 'reading'  ? "pulse-green 2.4s ease-in-out infinite"
-                : label.tone === 'offline'  ? "pulse-red 1.2s ease-in-out infinite"
-                : "none",
+                animation: label.tone === 'thinking' ? "shimmer-block 1.8s ease-in-out infinite" : "none",
               }} />
             )}
             <span style={{
-              fontFamily: "var(--mono)", fontSize: 13, letterSpacing: "0.14em",
+              fontFamily: "var(--mono)", fontSize: 11, letterSpacing: "0.14em",
               color: label.color,
-              transition: "color 0.4s ease",
             }}>
               {label.text}{label.tone === 'coding' || label.tone === 'thinking' ? '…' : ''}
             </span>
@@ -191,10 +174,41 @@ export default function OpponentPanel({ opponent, oppSilhouette, oppTestsPassed,
             )}
           </div>
 
+          {/* ── Incoming chat from the opponent (ephemeral, newest last) ── */}
+          {messages.length > 0 && (
+            <div style={{
+              padding: "10px 12px", borderBottom: "1px solid var(--border)", flexShrink: 0,
+              display: "flex", flexDirection: "column", gap: 6, maxHeight: 132, overflowY: "auto",
+            }}>
+              {messages.slice(-4).map((m) => (
+                <div key={m.id} className="fade-in" style={{
+                  border: "1px solid var(--border)", background: "var(--s2)",
+                  borderRadius: 6, padding: "7px 9px",
+                  fontSize: 13, lineHeight: 1.45, color: "var(--text)", wordBreak: "break-word",
+                }}>
+                  {m.text}
+                </div>
+              ))}
+              {onOpenChat && (
+                <button
+                  onClick={onOpenChat}
+                  style={{
+                    alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 5,
+                    background: "none", border: "none", cursor: "pointer", padding: 0,
+                    fontFamily: "var(--mono)", fontSize: 10, letterSpacing: "0.12em",
+                    textTransform: "uppercase", color: "var(--muted)",
+                  }}
+                >
+                  <IconChat s={11} /> Reply
+                </button>
+              )}
+            </div>
+          )}
+
           {/* ── Thermal label ── */}
           <div style={{ padding: "9px 12px 4px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-            <span style={{ fontFamily: "var(--mono)", fontSize: 13, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--muted)" }}>Thermal View</span>
-            <span style={{ fontFamily: "var(--mono)", fontSize: 12, letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(var(--accent-rgb),0.7)" }}>live</span>
+            <span style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--muted)" }}>Their code</span>
+            <span style={{ fontFamily: "var(--mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--muted)" }}>live</span>
           </div>
 
           {/* ── Silhouette ── */}

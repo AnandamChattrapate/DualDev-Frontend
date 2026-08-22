@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import CodeEditor from "../editor/CodeEditor"
 import useMatchStore from "../../store/matchStore"
+import useThemeStore from "../../store/themeStore"
 import { IconChevronUp, IconChevronDown } from "./icons"
 
 export default function EditorPanel({
@@ -11,7 +12,7 @@ export default function EditorPanel({
   myTestsPassed,
 }) {
   const setMyLanguage = useMatchStore((s) => s.setMyLanguage)
-  const darkMode      = useMatchStore((s) => s.darkMode)
+  const darkMode      = useThemeStore((s) => s.theme) === "dark"
 
   const isSubmission = !!myVerdict
   const results      = isSubmission ? (Array.isArray(myTCResults) ? myTCResults : []) : (Array.isArray(runResults) ? runResults : [])

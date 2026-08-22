@@ -63,3 +63,11 @@ export const IconBulb = ({ s }) => (
 export const IconClose = ({ s }) => (
   <svg {...base(s)}><path d="M18 6 6 18M6 6l12 12" /></svg>
 )
+
+export const IconChat = ({ s }) => (
+  <svg {...base(s)}><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.9-.9L3 21l1.9-4.6A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4Z" /></svg>
+)
+
+export const IconSend = ({ s }) => (
+  <svg {...base(s)}><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z" /></svg>
+)
