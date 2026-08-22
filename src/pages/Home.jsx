@@ -1,111 +1,285 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { Swords, Users, Check, X, Zap, Target, Link2, Sun, Moon } from 'lucide-react'
+import { Check, X, ThumbsUp, ThumbsDown } from 'lucide-react'
 import useMatchStore from '../store/matchStore.js'
-import useThemeStore from '../store/themeStore.js'
 import socket from '../socket/socket.js'
-import MatchmakingRouteDiscovery from "../components/MatchmakingRouteDiscovery.jsx";
+import HeroStage from '../components/home/HeroStage.jsx'
+import QueueRadar from '../components/home/QueueRadar.jsx'
+import StatsTicker from '../components/home/StatsTicker.jsx'
+import Navbar from '../components/layout/Navbar.jsx'
 
 const MIN_MATCH_WIDTH = 768
+
+const TOPICS = ['Array', 'HashMap', 'String']
+const DIFFICULTIES = ['Easy', 'Medium', 'Hard']
+
+const QUOTE_BATCH = 6
+const QUOTE_PREFETCH_AT_REMAINING = 2
+const QUOTE_TRANSITION_MS = 220
+
+const QUOTE_FALLBACK = [
+  { id: 'fb-1', text: "Your friend thinks they're better. Bet." },
+  { id: 'fb-2', text: 'Same problem. Same clock. No excuses.' },
+  { id: 'fb-3', text: 'Code under pressure. Win under pressure.' },
+  { id: 'fb-4', text: 'They can see your silhouette. Not your source.' },
+  { id: 'fb-5', text: 'First to green wins the room.' },
+  { id: 'fb-6', text: 'Ranked is personal. Prove it.' },
+]
+
+/* One of these opens the very first quote slot for every session (picked at
+   random, client-side only — never sent to the feedback API). Every quote
+   after it, on this load and all future refills, comes from fetchQuoteFeed. */
+const QUOTE_COLD_OPENERS = [
+  { id: 'cold-1', text: 'You can grind LeetCode alone. Dual Dev puts you under pressure.' },
+  { id: 'cold-2', text: 'LeetCode builds the skill. Dual Dev tests the composure.' },
+  { id: 'cold-3', text: 'Practice LeetCode in comfort. Compete on Dual Dev under pressure.' },
+  { id: 'cold-4', text: 'Green checks on LeetCode feel good. Beating your rival feels better.' },
+  { id: 'cold-5', text: 'LeetCode teaches you to solve. Dual Dev teaches you to perform.' },
+]
+
+function dedupeQuotesById(list, excludeIds = new Set()) {
+  const seen = new Set(excludeIds)
+  const out = []
+  for (const item of list) {
+    const id = String(item.id)
+    if (seen.has(id)) continue
+    seen.add(id)
+    out.push({ id, text: String(item.text).replace(/\s*\n\s*/g, ' ') })
+  }
+  return out
+}
+
+async function fetchQuoteFeed(excludeIds = new Set()) {
+  try {
+    const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/phrases/feed`, {
+      params: { limit: QUOTE_BATCH },
+      withCredentials: true,
+    })
+    const raw = Array.isArray(res.data?.phrases) ? res.data.phrases : []
+    const cleaned = dedupeQuotesById(raw, excludeIds)
+    if (cleaned.length > 0) return cleaned.slice(0, QUOTE_BATCH)
+  } catch {
+    /* fall through */
+  }
+  return QUOTE_FALLBACK.filter((p) => !excludeIds.has(String(p.id))).slice(0, QUOTE_BATCH)
+}
+
+function recordQuoteVote(phraseId, action) {
+  if (!phraseId || String(phraseId).startsWith('fb-') || String(phraseId).startsWith('cold-')) return
+  axios
+    .post(
+      `${import.meta.env.VITE_API_URL}/api/phrases/feedback`,
+      { phraseId, action },
+      { withCredentials: true },
+    )
+    .catch(() => {})
+}
+
+/* Human-like typewriter: per-character delay jitters, with a longer pause
+   after punctuation, instead of a flat interval. */
+function useTypewriter(text, enabled) {
+  const [typed, setTyped] = useState('')
+
+  useEffect(() => {
+    if (!enabled) return
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    let tickTimeout = null
+
+    const tick = (i) => {
+      setTyped(text.slice(0, i))
+      if (i >= text.length) return
+      const justTyped = text[i - 1]
+      const delay = /[.,!?]/.test(justTyped)
+        ? 170 + Math.random() * 140
+        : 32 + Math.random() * 46
+      tickTimeout = setTimeout(() => tick(i + 1), delay)
+    }
+
+    const startTimeout = setTimeout(() => {
+      if (reduceMotion) {
+        setTyped(text)
+        return
+      }
+      setTyped('')
+      tick(1)
+    }, 0)
+
+    return () => {
+      clearTimeout(startTimeout)
+      clearTimeout(tickTimeout)
+    }
+  }, [text, enabled])
+
+  return typed
+}
 
 export default function Home() {
   const navigate        = useNavigate()
   const isAuthenticated = useMatchStore((s) => s.isAuthenticated)
   const authLoading     = useMatchStore((s) => s.authLoading)
-  const currentUser     = useMatchStore((s) => s.currentUser)
   const isSearching     = useMatchStore((s) => s.isSearching)
   const setSearching    = useMatchStore((s) => s.setSearching)
   const initMatch       = useMatchStore((s) => s.initMatch)
-  const logout          = useMatchStore((s) => s.logout)
-  const theme           = useThemeStore((s) => s.theme)
-  const toggleTheme     = useThemeStore((s) => s.toggleTheme)
-  const reducedMotion   = useReducedMotion()
 
   const [mobileWarning, setMobileWarning] = useState(null)
 
   const [showModal, setShowModal]   = useState(false)
-  const [topic, setTopic]           = useState("Array")
-  const [difficulty, setDifficulty] = useState("Easy")
-  const [mode, setMode]             = useState("random")
+  const [topic, setTopic]           = useState('Array')
+  const [difficulty, setDifficulty] = useState('Easy')
+  const [mode, setMode]             = useState('random')
 
   const [roomId, setRoomId]             = useState(null)
-  const [friendRoomId, setFriendRoomId] = useState("")
+  const [friendRoomId, setFriendRoomId] = useState('')
   const [roomCopied, setRoomCopied]     = useState(false)
 
   const [pendingMatch, setPendingMatch]       = useState(null)
   const [acceptCountdown, setAcceptCountdown] = useState(30)
   const [waitingAccept, setWaitingAccept]     = useState(false)
   const [startCountdown, setStartCountdown]   = useState(null)
-  /* Issue 3 — 30 s search countdown shown on the overlay */
   const [searchSecondsLeft, setSearchSecondsLeft] = useState(30)
-  /* Ref so the auto-cancel interval can check if a match was already found
-     without needing pendingMatch in its dependency array. */
   const pendingMatchRef = useRef(null)
 
-  const [timeLeft, setTimeLeft] = useState(900)
-  // stats 
-  // const totalMatches = "1.2M+"
-  const totalLanguages = 3
-   const matchmakingSpeed = "120ms"
-   const judgeUptime = "99.9%"
-  // const playersOnline = "2,431"
+  const [playersOnline, setPlayersOnline] = useState(0)
+  const [battlesPlayed, setBattlesPlayed] = useState(0)
+  const [battlesLiveNow, setBattlesLiveNow] = useState(0)
+  const [totalUsers, setTotalUsers] = useState(0)
+  const [languages, setLanguages] = useState(3)
+  const [problems, setProblems] = useState(0)
+  const [topics, setTopics] = useState(0)
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [statsError, setStatsError] = useState(null)
 
-  const [playersOnline, setPlayersOnline] = useState(0);
-  const [battlesPlayed, setBattlesPlayed] = useState(0);
-  const [battlesLiveNow, setBattlesLiveNow] = useState(0);
-  const [totalUsers, setTotalUsers] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  // 2. Function to call the backend API
   const fetchStats = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/stats`); // adjust to your backend URL
-      console.log("Response status:", res.status); // check if it's 200
-      if (!res.ok) throw new Error(`Network error: ${res.status}`);
-      const data = await res.json();               // parse JSON *here*
-      console.log("Stats data:", data);            // now log the actual data
-
-      // 3. Assign the received data to state variables
-      setPlayersOnline(data.playersOnline);
-      setBattlesPlayed(data.battlesPlayed);
-      setBattlesLiveNow(data.battlesLiveNow);
-      setTotalUsers(data.totalUsers);
-      setLoading(false);
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/stats`)
+      if (!res.ok) throw new Error(`Network error: ${res.status}`)
+      const data = await res.json()
+      setPlayersOnline(data.playersOnline)
+      setBattlesPlayed(data.battlesPlayed)
+      setBattlesLiveNow(data.battlesLiveNow)
+      setTotalUsers(data.totalUsers)
+      setLanguages(data.languages ?? 3)
+      setProblems(data.problems ?? 0)
+      setTopics(data.topics ?? 0)
+      setStatsError(null)
+      setStatsLoading(false)
     } catch (err) {
-      setError(err.message);
-      setLoading(false);
+      setStatsError(err.message)
+      setStatsLoading(false)
     }
-  };
+  }
 
-  // 4. Fetch on component mount and then poll every 4 seconds so online/live
-  // numbers feel real-time without hammering the API.
   useEffect(() => {
-    fetchStats(); // initial fetch
-    const interval = setInterval(fetchStats, 4000); // refresh every 4s
-    return () => clearInterval(interval); // cleanup
-  }, []);
+    fetchStats()
+    const interval = setInterval(fetchStats, 4000)
+    return () => clearInterval(interval)
+  }, [])
 
-    // ── HEARTBEAT for online tracking ──
+  const [quotes, setQuotes]   = useState([])
+  const [quoteIndex, setQuoteIndex] = useState(0)
+  const [quotePhase, setQuotePhase] = useState('in') // 'in' | 'out'
+  const [quotesReady, setQuotesReady] = useState(false)
+  const [quoteRevealed, setQuoteRevealed] = useState(false)
+  const quoteBusyRef = useRef(false)
+  const quotesRef = useRef([])
+  const quoteIndexRef = useRef(0)
+  const nextQuoteBatchRef = useRef(null)
+  const quotePrefetchingRef = useRef(false)
+
+  useEffect(() => { quotesRef.current = quotes }, [quotes])
+  useEffect(() => { quoteIndexRef.current = quoteIndex }, [quoteIndex])
+
+  useEffect(() => {
+    let cancelled = false
+    const opener = QUOTE_COLD_OPENERS[Math.floor(Math.random() * QUOTE_COLD_OPENERS.length)]
+    fetchQuoteFeed(new Set([opener.id])).then((batch) => {
+      if (cancelled) return
+      const rest = (batch.length ? batch : QUOTE_FALLBACK).slice(0, QUOTE_BATCH - 1)
+      setQuotes([opener, ...rest])
+      setQuoteIndex(0)
+      setQuotesReady(true)
+      setQuotePhase('in')
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(() => setQuoteRevealed(true), 3000)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const maybePrefetchQuotes = useCallback((currentQuotes, currentIndex) => {
+    const remaining = currentQuotes.length - 1 - currentIndex
+    if (remaining > QUOTE_PREFETCH_AT_REMAINING) return
+    if (quotePrefetchingRef.current || nextQuoteBatchRef.current) return
+    quotePrefetchingRef.current = true
+    const exclude = new Set(currentQuotes.map((q) => String(q.id)))
+    fetchQuoteFeed(exclude).then((batch) => {
+      nextQuoteBatchRef.current = batch.length ? batch : QUOTE_FALLBACK
+      quotePrefetchingRef.current = false
+    })
+  }, [])
+
+  const advanceQuote = useCallback(async () => {
+    if (quoteBusyRef.current) return
+    quoteBusyRef.current = true
+
+    const currentQuotes = quotesRef.current
+    const currentIndex = quoteIndexRef.current
+    const isLast = currentIndex >= currentQuotes.length - 1
+
+    if (!isLast) {
+      maybePrefetchQuotes(currentQuotes, currentIndex)
+      setQuotePhase('out')
+      await new Promise((r) => setTimeout(r, QUOTE_TRANSITION_MS))
+      setQuoteIndex(currentIndex + 1)
+      setQuotePhase('in')
+      quoteBusyRef.current = false
+      return
+    }
+
+    let batch = nextQuoteBatchRef.current
+    nextQuoteBatchRef.current = null
+    if (!batch) {
+      const exclude = new Set(currentQuotes.map((q) => String(q.id)))
+      const next = await fetchQuoteFeed(exclude)
+      batch = next.length ? next : QUOTE_FALLBACK
+    }
+
+    setQuotePhase('out')
+    await new Promise((r) => setTimeout(r, QUOTE_TRANSITION_MS))
+    setQuotes(batch)
+    setQuoteIndex(0)
+    setQuotePhase('in')
+    quoteBusyRef.current = false
+  }, [maybePrefetchQuotes])
+
+  const onQuoteVote = (action) => {
+    const current = quotesRef.current[quoteIndexRef.current]
+    if (!current) return
+    recordQuoteVote(current.id, action === 'up' ? 'like' : 'dislike')
+    advanceQuote()
+  }
+
+  const typedQuoteText = useTypewriter(
+    quotes[quoteIndex]?.text || '',
+    quotesReady && quoteRevealed && quotePhase === 'in',
+  )
+
+  const modalHeadingText = mode === 'random' ? 'Find a match' : 'Create a room'
+  const typedModalHeading = useTypewriter(modalHeadingText, showModal)
+  const typedHowItWorksHeading = useTypewriter('How a match works', true)
+
   useEffect(() => {
     const interval = setInterval(() => {
-      if (socket.connected) {
-        socket.emit('heartbeat');
-      }
-    }, 10_000); // every 10 seconds
+      if (socket.connected) socket.emit('heartbeat')
+    }, 10_000)
+    return () => clearInterval(interval)
+  }, [])
 
-    return () => clearInterval(interval);
-  }, []);
-
-  /* Keep ref in sync so the auto-cancel can check without a stale closure */
   useEffect(() => { pendingMatchRef.current = pendingMatch }, [pendingMatch])
 
-  /* Issue 3 — 30 s search timeout.
-     Counts down while searching. At 0 it calls cancelSearch ONLY if no
-     match has been found yet (pendingMatchRef guard). The countdown resets
-     whenever isSearching flips back to false. */
   useEffect(() => {
     if (!isSearching) { setSearchSecondsLeft(30); return }
     setSearchSecondsLeft(30)
@@ -115,8 +289,6 @@ export default function Home() {
       setSearchSecondsLeft(seconds)
       if (seconds <= 0) {
         clearInterval(iv)
-        /* Don't cancel if match_found already arrived — the accept popup
-           is showing and the user still needs to accept/decline. */
         if (pendingMatchRef.current) return
         setSearching(false)
         axios.delete(`${import.meta.env.VITE_API_URL}/api/matchmaking/leave`, { withCredentials: true }).catch(() => {})
@@ -125,112 +297,11 @@ export default function Home() {
     return () => clearInterval(iv)
   }, [isSearching]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    useEffect(() => {
-
-      const timer = setInterval(() => {
-
-        setTimeLeft((prev) => {
-
-          if (prev <= 0) {
-            clearInterval(timer)
-            return 0
-          }
-
-          return prev - 1
-
-        })
-
-      }, 1000)
-
-      return () => clearInterval(timer)
-
-    }, [])
-
-  const minutes = String(Math.floor(timeLeft / 60)).padStart(2, '0')
-  const seconds = String(timeLeft % 60).padStart(2, '0')
-  const userCode = `def two_sum(nums, target):
-    seen = {}
-
-        for i, num in enumerate(nums):
-            comp = target - num
-
-            if comp in seen:
-                return [seen[comp], i]
-
-            seen[num] = i
-
-        return []
-
-    n = int(input())
-    nums = list(map(int, input().split()))
-    target = int(input())
-
-    print(two_sum(nums, target))`
-
-    const opponentCode = `#include<▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓>
-    using namespace ▓▓▓;
-
-    int ▓▓▓▓(){
-        int ▓;
-        cin >> ▓;
-
-        vector<int> ▓▓▓▓(▓);
-
-        for(int ▓ = ▓; ▓ < ▓; ▓++){
-            cin >> ▓▓▓▓[▓];
-        }
-
-        int ▓▓▓▓▓▓;
-        cin >> ▓▓▓▓▓▓;
-
-        unordered_map<int, int> ▓▓▓▓;
-
-        for(int ▓ = ▓; ▓ < ▓; ▓++){
-
-            int ▓▓▓▓▓▓▓▓▓▓▓ = ▓▓▓▓▓▓ - ▓▓▓▓[▓];
-
-            if(▓▓▓▓.▓▓▓▓▓(▓▓▓▓▓▓▓▓▓▓▓)){
-                cout << ▓▓▓▓[▓▓▓▓▓▓▓▓▓▓▓] << " " << ▓;
-                return ▓;
-            }
-
-            ▓▓▓▓[▓▓▓▓[▓]] = ▓;
-        }
-
-        return ▓;
-    }`
-
-    const [typedUserCode, setTypedUserCode] = useState('')
-    const [typedOpponentCode, setTypedOpponentCode] = useState('')
-
-    useEffect(() => {
-
-      let userIndex = 0
-      let opponentIndex = 0
-
-      const interval = setInterval(() => {
-
-        if (userIndex < userCode.length) {
-          setTypedUserCode(userCode.slice(0, userIndex + 1))
-          userIndex++
-        }
-
-        if (opponentIndex < opponentCode.length) {
-          setTypedOpponentCode(opponentCode.slice(0, opponentIndex + 1))
-          opponentIndex++
-        }
-
-      }, 180)
-
-      return () => clearInterval(interval)
-
-    }, [])
-
   useEffect(() => {
     socket.on('match_found', (data) => {
       setPendingMatch({
         ...data,
-        reason:data.reason || "",
+        reason: data.reason || '',
       })
       setSearching(false)
       setRoomId(null)
@@ -263,18 +334,15 @@ export default function Home() {
       socket.off('match_found'); socket.off('match_acceptance_waiting')
       socket.off('match_accepted'); socket.off('match_cancelled'); socket.off('match_starting')
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const acceptMatch  = () => { socket.emit('accept_match',  { matchId: pendingMatch.matchId }); setWaitingAccept(true) }
   const declineMatch = () => { socket.emit('decline_match', { matchId: pendingMatch.matchId }); setPendingMatch(null); setWaitingAccept(false) }
 
-  /* Task 4/5 — actions that require an active match session must check
-     auth first (redirect to /login) and screen width first (inline
-     warning instead of letting the user queue and get stuck on mobile). */
   const requiresDesktopAndAuth = () => {
     if (!isAuthenticated) { navigate('/login'); return false }
     if (window.innerWidth < MIN_MATCH_WIDTH) {
-      setMobileWarning("Matches require a desktop or laptop screen (≥768px). Please switch devices to play.")
+      setMobileWarning('Matches require a desktop or laptop screen (≥768px). Please switch devices to play.')
       setTimeout(() => setMobileWarning(null), 5000)
       return false
     }
@@ -284,1530 +352,1634 @@ export default function Home() {
   const joinMatch = async () => {
     if (!requiresDesktopAndAuth()) return
     if (!socket.connected || !socket.id) {
-      alert("Still connecting to server — please wait a moment and try again.")
+      alert('Still connecting to server — please wait a moment and try again.')
       return
     }
-    try { setSearching(true); setShowModal(false); await axios.post(`${import.meta.env.VITE_API_URL}/api/matchmaking/join`, { socketId: socket.id, topic, difficulty }, { withCredentials: true }) }
-    catch (e) { console.error(e.response?.data || e.message); setSearching(false) }
+    try {
+      setSearching(true)
+      setShowModal(false)
+      await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/matchmaking/join`,
+        { socketId: socket.id, topic, difficulty },
+        { withCredentials: true },
+      )
+    } catch (e) {
+      console.error(e.response?.data || e.message)
+      setSearching(false)
+    }
   }
+
   const createRoom = async () => {
     if (!requiresDesktopAndAuth()) return
     if (!socket.connected || !socket.id) {
-      alert("Still connecting to server — please wait a moment and try again.")
+      alert('Still connecting to server — please wait a moment and try again.')
       return
     }
-    try { setShowModal(false); const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/matchmaking/create-room`, { socketId: socket.id, topic, difficulty }, { withCredentials: true }); setRoomId(res.data.roomId) }
-    catch (e) { console.error(e.response?.data || e.message) }
+    try {
+      setShowModal(false)
+      const res = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/matchmaking/create-room`,
+        { socketId: socket.id, topic, difficulty },
+        { withCredentials: true },
+      )
+      setRoomId(res.data.roomId)
+    } catch (e) {
+      console.error(e.response?.data || e.message)
+    }
   }
+
   const joinRoom = async () => {
     if (!requiresDesktopAndAuth()) return
     if (!socket.connected || !socket.id) {
-      alert("Still connecting to server — please wait a moment and try again.")
+      alert('Still connecting to server — please wait a moment and try again.')
       return
     }
-    try { await axios.post(`${import.meta.env.VITE_API_URL}/api/matchmaking/join-room`, { socketId: socket.id, roomId: friendRoomId }, { withCredentials: true }) }
-    catch (e) { console.error(e.response?.data || e.message) }
+    try {
+      await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/matchmaking/join-room`,
+        { socketId: socket.id, roomId: friendRoomId },
+        { withCredentials: true },
+      )
+    } catch (e) {
+      console.error(e.response?.data || e.message)
+    }
   }
+
   const cancelSearch = async () => {
     setSearching(false)
     await axios.delete(`${import.meta.env.VITE_API_URL}/api/matchmaking/leave`, { withCredentials: true }).catch(() => {})
   }
 
-  const handleLogout = async () => {
-    await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/logout`, {}, { withCredentials: true }).catch(() => {})
-    logout()
-    navigate('/login')
+  if (authLoading) {
+    return (
+      <div className="home-root min-h-screen flex items-center justify-center">
+        <p className="home-muted text-sm">Loading…</p>
+      </div>
+    )
   }
 
-  // ── Loading ──────────────────────────────────────────────────────────
-  if (authLoading) return (
-    <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-8 h-8 border-2 border-[var(--color-border)] border-t-[#00FF85] rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-[var(--color-text-muted)] font-mono text-xs tracking-[3px]">INITIALIZING</p>
-      </div>
-    </div>
-  )
-
-  // Home is public — unauthenticated visitors see the full page. Only the
-  // match-starting actions (joinMatch/createRoom/joinRoom) gate on auth.
-
-  const ringCircumference = 2 * Math.PI * 34
+  const ringCircumference = 2 * Math.PI * 44
   const ringOffset = ringCircumference - (ringCircumference * (acceptCountdown / 30))
+  const activeQuote = quotes[quoteIndex]
+  const activeQuoteText = activeQuote?.text || ''
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)] overflow-x-hidden">
-
-      {/* ── GLOBAL STYLES injected via style tag ── */}
+    <div className="home-root min-h-screen">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
-        .font-mono-display { font-family: 'Space Mono', monospace; }
-        @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-        .ticker { animation: ticker 24s linear infinite; }
-        @keyframes liveBlink { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(0.7); } }
-        .live-dot { animation: liveBlink 1.2s ease-in-out infinite; }
-        @keyframes glowPulse { 0%,100% { box-shadow: 0 0 16px rgba(0,255,133,0.4); } 50% { box-shadow: 0 0 36px rgba(0,255,133,0.7), 0 0 64px rgba(0,255,133,0.2); } }
-        .glow-btn { animation: glowPulse 2.4s ease-in-out infinite; }
-        @keyframes slideUp { from { transform:translateY(20px); opacity:0; } to { transform:translateY(0); opacity:1; } }
-        .slide-up { animation: slideUp 0.22s ease forwards; }
-        @keyframes searchPulse { 0%,100% { opacity:1; } 50% { opacity:0.2; } }
-        .search-dot { animation: searchPulse 1.2s ease-in-out infinite; }
-        .dot-grid { background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px); background-size: 28px 28px; }
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap');
+
+        /* Previous DualDev wordmark (Manrope + peach DEV) + premium motion */
+        .brand-wordmark {
+          font-family: 'Manrope', sans-serif;
+          font-weight: 800;
+          letter-spacing: -0.05em;
+          line-height: 1;
+          display: inline-flex;
+          align-items: baseline;
+          position: relative;
+        }
+        .brand-wordmark .brand-dual {
+          color: var(--color-text-primary);
+        }
+        .brand-wordmark .brand-dev {
+          color: #F4B183;
+          background: linear-gradient(
+            105deg,
+            #C97A45 0%,
+            #E8A06A 22%,
+            #F4B183 40%,
+            #FFF8F0 50%,
+            #F4B183 60%,
+            #E8A06A 78%,
+            #C97A45 100%
+          );
+          background-size: 280% 100%;
+          -webkit-background-clip: text;
+          background-clip: text;
+          -webkit-text-fill-color: transparent;
+          animation: brandSheen 4.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+          filter: drop-shadow(0 0 18px rgba(244,177,131,0.18));
+        }
+        @keyframes brandSheen {
+          0%, 55% { background-position: 120% 50%; }
+          100% { background-position: -120% 50%; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .brand-wordmark .brand-dev {
+            animation: none !important;
+            -webkit-text-fill-color: #F4B183;
+            background: none;
+            color: #F4B183;
+            filter: none;
+          }
+        }
+
+        .home-root {
+          --home-ink: var(--color-text-primary);
+          --home-muted: var(--color-text-secondary);
+          --home-faint: var(--color-text-muted);
+          --home-line: var(--color-border);
+          --home-panel: var(--color-surface);
+          --home-panel-2: var(--color-surface-2);
+          --home-bg: var(--color-bg);
+          --home-accent: var(--color-accent-green);
+          --home-warn: var(--color-accent-orange);
+          background:
+            radial-gradient(1200px 500px at 10% -10%, color-mix(in srgb, var(--home-accent) 12%, transparent), transparent 55%),
+            radial-gradient(900px 420px at 100% 0%, color-mix(in srgb, var(--home-warn) 8%, transparent), transparent 50%),
+            var(--home-bg);
+          color: var(--home-ink);
+          font-family: 'DM Sans', system-ui, sans-serif;
+        }
+        .home-display {
+          font-family: 'Instrument Serif', Georgia, serif;
+          font-weight: 400;
+          letter-spacing: -0.02em;
+        }
+        .home-muted { color: var(--home-muted); }
+        .home-faint { color: var(--home-faint); }
+        .home-line { border-color: var(--home-line); }
+        .home-panel {
+          background: var(--home-panel);
+          border: 1px solid var(--home-line);
+        }
+        .home-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 0.4rem;
+          height: 44px;
+          padding: 0 1.15rem;
+          font-size: 14px;
+          font-weight: 600;
+          border-radius: 4px;
+          cursor: pointer;
+          border: 1px solid transparent;
+          transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+        .home-btn:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+        .home-btn-primary {
+          background: var(--home-accent);
+          color: #0A0A0A;
+        }
+        .home-btn-primary:hover:not(:disabled) {
+          filter: brightness(1.06);
+        }
+        .home-btn-secondary {
+          background: transparent;
+          color: var(--home-ink);
+          border-color: var(--home-line);
+        }
+        .home-btn-secondary:hover:not(:disabled) {
+          border-color: var(--home-muted);
+        }
+        .home-btn-ghost {
+          background: transparent;
+          color: var(--home-muted);
+          border-color: transparent;
+          height: 36px;
+          padding: 0 0.75rem;
+          font-weight: 500;
+        }
+        .home-btn-ghost:hover {
+          color: var(--home-ink);
+        }
+        .home-btn-danger {
+          background: transparent;
+          color: #E11D48;
+          border-color: color-mix(in srgb, #E11D48 35%, transparent);
+        }
+        .home-btn-danger:hover:not(:disabled) {
+          background: color-mix(in srgb, #E11D48 8%, transparent);
+        }
+        .home-input, .home-select {
+          width: 100%;
+          height: 44px;
+          padding: 0 0.9rem;
+          background: var(--home-bg);
+          border: 1px solid var(--home-line);
+          border-radius: 4px;
+          color: var(--home-ink);
+          font-size: 14px;
+          outline: none;
+        }
+        .home-input:focus, .home-select:focus {
+          border-color: var(--home-accent);
+        }
+        .home-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 200;
+          background: color-mix(in srgb, var(--home-bg) 88%, black);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 1.5rem;
+        }
+        .home-dialog {
+          width: 100%;
+          max-width: 380px;
+          background: var(--home-panel);
+          border: 1px solid var(--home-line);
+          border-radius: 6px;
+          padding: 1.75rem;
+        }
+        .home-stat-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 1px;
+          background: var(--home-line);
+          border: 1px solid var(--home-line);
+          border-radius: 6px;
+          overflow: hidden;
+        }
+        @media (min-width: 640px) {
+          .home-stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        }
+        .home-stat-cell {
+          background: var(--home-panel);
+          padding: 1.1rem 1rem;
+        }
+        /* ── Quote bar (between navbar and hero) ─────────── */
+        .hq-bar {
+          background: var(--home-bg);
+          padding: 1.4rem 1.25rem 0.4rem;
+          opacity: 0;
+          transform: translateY(14px) scale(0.98);
+          transition: opacity 600ms cubic-bezier(0.16, 1, 0.3, 1), transform 600ms cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .hq-bar.is-revealed {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+        .hq-bar .hq-controls {
+          opacity: 0;
+          transform: translateY(6px);
+          transition: opacity 450ms ease, transform 450ms ease;
+        }
+        .hq-bar.is-revealed .hq-controls {
+          opacity: 1;
+          transform: translateY(0);
+          transition-delay: 200ms;
+        }
+        .hq-row {
+          margin: 0 auto;
+          max-width: 72rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-wrap: wrap;
+          gap: 1rem;
+        }
+        .hq-stage {
+          flex: 0 1 auto;
+          min-width: 0;
+          max-width: 36rem;
+          overflow: hidden;
+        }
+        .hq-quote {
+          margin: 0;
+          font-family: 'Manrope', 'DM Sans', system-ui, sans-serif;
+          font-weight: 700;
+          font-size: clamp(1.4rem, 2.2vw, 1.6rem);
+          line-height: 1.2;
+          letter-spacing: -0.01em;
+          color: var(--home-ink);
+          text-align: center;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          min-height: 2.4em;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .hq-cursor {
+          display: inline-block;
+          width: 2px;
+          height: 0.95em;
+          margin-left: 2px;
+          vertical-align: -0.15em;
+          background: var(--home-accent);
+          animation: hqCursorBlink 800ms step-end infinite;
+        }
+        @keyframes hqCursorBlink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+        .hq-quote.is-out {
+          opacity: 0;
+          transform: translateY(-4px);
+          transition: opacity ${QUOTE_TRANSITION_MS}ms ease, transform ${QUOTE_TRANSITION_MS}ms ease;
+        }
+        .hq-controls {
+          flex: none;
+          display: flex;
+          align-items: center;
+          gap: 0.65rem;
+        }
+        .hq-votes {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.3rem;
+        }
+        .hq-vote {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          height: 24px;
+          border-radius: 5px;
+          border: 1px solid var(--home-line);
+          background: color-mix(in srgb, var(--home-panel) 70%, transparent);
+          color: var(--home-muted);
+          cursor: pointer;
+          transition:
+            color 0.15s ease,
+            border-color 0.15s ease,
+            background 0.15s ease,
+            transform 0.12s ease,
+            opacity 0.15s ease;
+        }
+        .hq-vote:hover {
+          color: var(--home-ink);
+          border-color: var(--home-muted);
+          opacity: 1;
+          transform: scale(1.05);
+        }
+        .hq-vote:active {
+          transform: scale(0.92);
+          background: color-mix(in srgb, var(--home-accent) 10%, transparent);
+        }
+        .hq-vote:focus-visible {
+          outline: 2px solid var(--home-accent);
+          outline-offset: 2px;
+        }
+        .hq-progress {
+          display: flex;
+          align-items: center;
+          gap: 0.3rem;
+        }
+        .hq-pill {
+          display: block;
+          height: 2px;
+          width: 10px;
+          border-radius: 2px;
+          background: color-mix(in srgb, var(--home-faint) 45%, transparent);
+          transition: width 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+          opacity: 0.55;
+        }
+        .hq-pill.is-active {
+          width: 16px;
+          background: var(--home-ink);
+          opacity: 0.85;
+        }
+        @media (max-width: 640px) {
+          .hq-bar { padding: 1.05rem 1rem 0.3rem; }
+          .hq-row { gap: 0.6rem; }
+          .hq-quote { font-size: 1.35rem; }
+          .hq-progress { display: none; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .hq-cursor {
+            display: none;
+          }
+          .hq-quote.is-out {
+            transform: none;
+          }
+          .hq-bar {
+            transition: opacity 550ms ease;
+            transform: none;
+          }
+          .hq-bar.is-revealed {
+            transform: none;
+          }
+          .hq-bar .hq-controls {
+            transition: opacity 300ms ease;
+            transform: none;
+          }
+          .hq-bar.is-revealed .hq-controls {
+            transform: none;
+            transition-delay: 0ms;
+          }
+        }
+
+        /* ── Hero stage (wide match-page preview) ─────────── */
+        .hero-stage {
+          position: relative;
+          width: 100%;
+          aspect-ratio: 16 / 10;
+          min-height: 360px;
+          max-height: 560px;
+          perspective: 1200px;
+        }
+        @media (min-width: 1024px) {
+          .hero-stage {
+            min-height: 420px;
+            max-height: 640px;
+          }
+        }
+        .hero-stage-frame {
+          position: relative;
+          height: 100%;
+          min-height: inherit;
+          border-radius: 12px;
+          border: 1px solid var(--home-line);
+          background:
+            linear-gradient(160deg, color-mix(in srgb, var(--home-panel) 88%, transparent), var(--home-bg));
+          overflow: hidden;
+          box-shadow:
+            0 1px 0 color-mix(in srgb, white 4%, transparent) inset,
+            0 24px 60px -28px rgba(0,0,0,0.55);
+          transform-style: preserve-3d;
+          transition: transform 0.12s linear;
+          will-change: transform;
+        }
+        .hero-stage-canvas {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+        }
+        .hero-chip-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--home-accent);
+          box-shadow: 0 0 0 0 color-mix(in srgb, var(--home-accent) 55%, transparent);
+          animation: heroPulse 1.8s ease-out infinite;
+        }
+        @keyframes heroPulse {
+          0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--home-accent) 55%, transparent); }
+          70%  { box-shadow: 0 0 0 8px transparent; }
+          100% { box-shadow: 0 0 0 0 transparent; }
+        }
+        .hero-match {
+          position: absolute;
+          z-index: 2;
+          left: 0.55rem;
+          right: 0.55rem;
+          top: 0.55rem;
+          bottom: 0.55rem;
+          border-radius: 9px;
+          border: 1px solid var(--home-line);
+          background: color-mix(in srgb, var(--home-bg) 90%, transparent);
+          backdrop-filter: blur(8px);
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+
+        /* Match-style top bar — no DualDev */
+        .hero-topbar {
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+          padding: 0.4rem 0.55rem;
+          border-bottom: 1px solid var(--home-line);
+          background: color-mix(in srgb, var(--home-panel-2) 80%, transparent);
+          flex-shrink: 0;
+          min-width: 0;
+        }
+        .hero-topbar-title {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--home-ink);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          min-width: 0;
+          max-width: 34%;
+        }
+        .hero-diff {
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          padding: 0.15rem 0.4rem;
+          border-radius: 4px;
+          flex-shrink: 0;
+        }
+        .hero-diff-easy {
+          color: var(--home-accent);
+          background: color-mix(in srgb, var(--home-accent) 12%, transparent);
+          border: 1px solid color-mix(in srgb, var(--home-accent) 28%, transparent);
+        }
+        .hero-topbar-topic {
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 9px;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--home-faint);
+          flex-shrink: 0;
+        }
+        .hero-topbar-spacer { flex: 1; min-width: 0.5rem; }
+        .hero-btn {
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 9px;
+          font-weight: 600;
+          letter-spacing: 0.06em;
+          padding: 0.28rem 0.55rem;
+          border-radius: 5px;
+          border: 1px solid var(--home-line);
+          color: var(--home-muted);
+          background: color-mix(in srgb, var(--home-panel) 70%, transparent);
+          flex-shrink: 0;
+          transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+        }
+        .hero-btn-run.is-flash {
+          color: var(--home-ink);
+          border-color: color-mix(in srgb, var(--home-accent) 45%, transparent);
+          background: color-mix(in srgb, var(--home-accent) 14%, transparent);
+          box-shadow: 0 0 14px color-mix(in srgb, var(--home-accent) 28%, transparent);
+          transform: scale(1.04);
+        }
+        .hero-btn-submit {
+          border-color: color-mix(in srgb, var(--home-accent) 25%, transparent);
+        }
+        .hero-btn-submit.is-flash {
+          color: #04130b;
+          background: var(--home-accent);
+          border-color: var(--home-accent);
+          box-shadow: 0 0 18px color-mix(in srgb, var(--home-accent) 40%, transparent);
+          transform: scale(1.05);
+        }
+        .hero-topbar-timer {
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 11px;
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
+          letter-spacing: 0.06em;
+          color: var(--home-ink);
+          padding: 0.2rem 0.45rem;
+          border-radius: 4px;
+          border: 1px solid var(--home-line);
+          background: color-mix(in srgb, var(--home-panel) 70%, transparent);
+          flex-shrink: 0;
+        }
+        .hero-topbar-timer.is-urgent {
+          color: #E11D48;
+          border-color: color-mix(in srgb, #E11D48 45%, transparent);
+          background: color-mix(in srgb, #E11D48 10%, transparent);
+          animation: heroTimerPulse 0.8s ease-in-out infinite;
+        }
+        @keyframes heroTimerPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.65; }
+        }
+        .hero-timeup {
+          position: absolute;
+          inset: 0;
+          z-index: 8;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 0.4rem;
+          background: color-mix(in srgb, var(--home-bg) 72%, transparent);
+          backdrop-filter: blur(6px);
+          animation: presenceMorph 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        .hero-timeup span {
+          font-family: 'Manrope', sans-serif;
+          font-weight: 800;
+          font-size: 1.6rem;
+          letter-spacing: 0.18em;
+          color: #E11D48;
+        }
+        .hero-timeup em {
+          font-style: normal;
+          font-size: 11px;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: var(--home-faint);
+        }
+
+        /* Problem statement strip */
+        .hero-problem {
+          flex-shrink: 0;
+          border-bottom: 1px solid var(--home-line);
+          background: color-mix(in srgb, var(--home-panel) 55%, transparent);
+          max-height: 32%;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+        }
+        .hero-problem-tabs {
+          display: flex;
+          align-items: center;
+          gap: 0.3rem;
+          padding: 0.35rem 0.5rem;
+          border-bottom: 1px solid var(--home-line);
+          background: color-mix(in srgb, var(--home-panel-2) 75%, transparent);
+          flex-shrink: 0;
+          overflow-x: auto;
+        }
+        .hero-problem-label {
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 9px;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: var(--home-faint);
+          padding-right: 0.2rem;
+          flex-shrink: 0;
+        }
+        .hero-problem-tab {
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 9px;
+          letter-spacing: 0.06em;
+          padding: 0.22rem 0.45rem;
+          border-radius: 4px;
+          color: var(--home-muted);
+          border: 1px solid transparent;
+          background: transparent;
+          cursor: pointer;
+          flex-shrink: 0;
+          transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+        }
+        .hero-problem-tab:hover {
+          color: var(--home-ink);
+        }
+        .hero-problem-tab.is-active {
+          color: var(--home-ink);
+          background: color-mix(in srgb, var(--home-accent) 10%, transparent);
+          border-color: color-mix(in srgb, var(--home-accent) 30%, transparent);
+        }
+        .hero-problem-body {
+          padding: 0.45rem 0.6rem 0.55rem;
+          overflow: hidden;
+          animation: presenceMorph 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        .hero-problem-desc {
+          margin: 0;
+          font-size: 10.5px;
+          line-height: 1.5;
+          color: var(--home-muted);
+          white-space: pre-wrap;
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .hero-problem-io {
+          display: flex;
+          flex-direction: column;
+          gap: 0.45rem;
+        }
+        .hero-io-block p {
+          margin: 0;
+          font-size: 10px;
+          line-height: 1.45;
+          color: var(--home-muted);
+          white-space: pre-wrap;
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+        }
+        .hero-io-label {
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 8px;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          margin-bottom: 0.2rem;
+          display: flex;
+          align-items: center;
+          gap: 0.35rem;
+        }
+        .hero-io-label::before {
+          content: '';
+          width: 3px;
+          height: 10px;
+          border-radius: 2px;
+        }
+        .hero-io-in { color: var(--home-accent); }
+        .hero-io-in::before { background: var(--home-accent); }
+        .hero-io-out { color: var(--home-warn); }
+        .hero-io-out::before { background: var(--home-warn); }
+        .hero-problem-constraints {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+        .hero-problem-constraints li {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.4rem;
+          padding: 0.25rem 0.4rem;
+          border-radius: 5px;
+          border: 1px solid var(--home-line);
+          background: color-mix(in srgb, var(--home-panel-2) 70%, transparent);
+        }
+        .hero-problem-constraints li::before {
+          content: '';
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: var(--home-accent);
+          margin-top: 0.3rem;
+          flex-shrink: 0;
+        }
+        .hero-problem-constraints code {
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 10px;
+          color: var(--home-ink);
+          opacity: 0.9;
+        }
+        .hero-problem-examples {
+          display: flex;
+          flex-direction: row;
+          gap: 0.4rem;
+          overflow: hidden;
+        }
+        .hero-example {
+          flex: 1;
+          min-width: 0;
+          border: 1px solid var(--home-line);
+          border-radius: 6px;
+          overflow: hidden;
+        }
+        .hero-example-label {
+          padding: 0.2rem 0.4rem;
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 8px;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          color: var(--home-faint);
+          background: color-mix(in srgb, var(--home-panel-2) 80%, transparent);
+          border-bottom: 1px solid var(--home-line);
+        }
+        .hero-example-row {
+          display: flex;
+          flex-direction: column;
+          gap: 0.08rem;
+          padding: 0.28rem 0.4rem;
+          border-top: 1px solid var(--home-line);
+        }
+        .hero-example-row:first-of-type { border-top: none; }
+        .hero-example-row span {
+          font-size: 8px;
+          font-weight: 600;
+          color: #3b82f6;
+        }
+        .hero-example-row:nth-of-type(2) span { color: var(--home-accent); }
+        .hero-example-row code {
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 9.5px;
+          color: var(--home-ink);
+          opacity: 0.9;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .hero-meter-row {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.3rem 0.55rem;
+          border-bottom: 1px solid var(--home-line);
+          flex-shrink: 0;
+        }
+        .hero-match-you {
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.1em;
+          color: var(--home-accent);
+          flex-shrink: 0;
+        }
+        .hero-match-opp {
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.1em;
+          color: #F4B183;
+          flex-shrink: 0;
+        }
+        .hero-meter {
+          flex: 1;
+          display: flex;
+          height: 3px;
+          background: var(--home-line);
+          border-radius: 2px;
+          overflow: hidden;
+        }
+        .hero-meter-fill {
+          height: 100%;
+          background: var(--home-accent);
+          transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .hero-meter-fill-opp {
+          height: 100%;
+          margin-left: auto;
+          background: #F4B183;
+          transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .hero-editors {
+          flex: 1;
+          display: grid;
+          grid-template-columns: 1fr 1.15fr;
+          min-height: 0;
+        }
+        .hero-caret {
+          display: inline-block;
+          width: 1.5px;
+          height: 0.95em;
+          margin-left: 1px;
+          vertical-align: text-bottom;
+          background: var(--home-accent);
+          animation: heroCaretBlink 1s step-end infinite;
+        }
+        .hero-caret-opp {
+          background: #F4B183;
+          height: 0.85em;
+        }
+        @keyframes heroCaretBlink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+        .hero-run-spin {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          border: 1.5px solid color-mix(in srgb, #A78BFA 35%, transparent);
+          border-top-color: #A78BFA;
+          animation: heroSpin 0.7s linear infinite;
+          flex-shrink: 0;
+        }
+        @keyframes heroSpin {
+          to { transform: rotate(360deg); }
+        }
+        .hero-presence.tone-running { background: rgba(167,139,250,0.06); }
+        .hero-presence.tone-results { background: rgba(0,255,133,0.06); }
+        .hero-tc-row {
+          flex-shrink: 0;
+          padding: 0.35rem 0.55rem 0.45rem;
+          border-bottom: 1px solid var(--home-line);
+          background: color-mix(in srgb, var(--home-panel-2) 55%, transparent);
+          animation: presenceMorph 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        .hero-tc-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 0.3rem;
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 9px;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+        .hero-tc-head span { color: var(--home-faint); }
+        .hero-tc-you .hero-tc-head strong { color: var(--home-accent); }
+        .hero-tc-opp .hero-tc-head strong { color: #F4B183; }
+        .hero-tc-chips {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.25rem;
+        }
+        .hero-tc-chip {
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+          font-size: 8px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          padding: 0.15rem 0.35rem;
+          border-radius: 3px;
+          border: 1px solid transparent;
+          animation: presenceMorph 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        .hero-tc-chip.is-pass {
+          color: var(--home-accent);
+          background: color-mix(in srgb, var(--home-accent) 12%, transparent);
+          border-color: color-mix(in srgb, var(--home-accent) 28%, transparent);
+        }
+        .hero-tc-chip.is-fail {
+          color: #E11D48;
+          background: color-mix(in srgb, #E11D48 10%, transparent);
+          border-color: color-mix(in srgb, #E11D48 28%, transparent);
+        }
+        .hero-editor {
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          overflow: hidden;
+          border-right: 1px solid var(--home-line);
+          font-family: 'JetBrains Mono', ui-monospace, monospace;
+        }
+        .hero-editor-opp { border-right: none; }
+        .hero-editor-head {
+          display: flex;
+          align-items: center;
+          gap: 0.45rem;
+          padding: 0.55rem 0.7rem;
+          border-bottom: 1px solid var(--home-line);
+          font-size: 10px;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          color: var(--home-muted);
+          flex-shrink: 0;
+        }
+        .hero-live-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: var(--home-accent);
+          box-shadow: 0 0 8px color-mix(in srgb, var(--home-accent) 70%, transparent);
+        }
+        .hero-lang {
+          margin-left: auto;
+          color: var(--home-faint);
+          letter-spacing: 0.06em;
+        }
+        .hero-your-code {
+          margin: 0;
+          padding: 0.55rem 0.65rem;
+          flex: 1;
+          overflow: auto;
+          font-size: 10px;
+          line-height: 1.6;
+          color: var(--home-ink);
+          white-space: pre;
+          font-family: inherit;
+        }
+        .hero-opp-avatar {
+          width: 18px;
+          height: 18px;
+          border-radius: 5px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 10px;
+          font-weight: 700;
+          background: rgba(255,68,68,0.1);
+          color: #FF4444;
+          border: 1px solid rgba(255,68,68,0.25);
+          flex-shrink: 0;
+        }
+        .hero-opp-meta {
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+          line-height: 1.15;
+        }
+        .hero-opp-name {
+          font-size: 11px;
+          letter-spacing: 0;
+          text-transform: none;
+          color: var(--home-ink);
+          font-weight: 600;
+        }
+        .hero-opp-elo {
+          font-size: 9px;
+          color: var(--home-accent);
+          letter-spacing: 0.04em;
+        }
+        .hero-opp-live {
+          margin-left: auto;
+          display: inline-flex;
+          align-items: center;
+          gap: 0.3rem;
+          font-size: 9px;
+          color: var(--home-faint);
+        }
+        .hero-presence {
+          display: flex;
+          align-items: center;
+          gap: 0.45rem;
+          padding: 0.45rem 0.7rem;
+          border-bottom: 1px solid var(--home-line);
+          font-size: 10px;
+          letter-spacing: 0.12em;
+          font-weight: 600;
+          flex-shrink: 0;
+          transition: background 0.45s ease;
+          animation: presenceMorph 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        @keyframes presenceMorph {
+          from { opacity: 0; transform: translateY(6px); filter: blur(2px); }
+          to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+        }
+        .hero-presence-text {
+          animation: presenceText 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        @keyframes presenceText {
+          from { opacity: 0; letter-spacing: 0.22em; }
+          to   { opacity: 1; letter-spacing: 0.12em; }
+        }
+        .hero-presence.tone-coding  { background: rgba(0,255,133,0.05); }
+        .hero-presence.tone-reading { background: rgba(96,165,250,0.06); }
+        .hero-presence.tone-thinking { background: rgba(255,170,0,0.05); }
+        .hero-presence-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          box-shadow: 0 0 8px currentColor;
+          animation: presenceDot 1.6s ease-in-out infinite;
+        }
+        @keyframes presenceDot {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(0.75); opacity: 0.55; }
+        }
+        .hero-typing {
+          display: inline-flex;
+          gap: 3px;
+          align-items: center;
+        }
+        .hero-typing i {
+          width: 4px;
+          height: 4px;
+          border-radius: 50%;
+          background: var(--home-accent);
+          display: block;
+          animation: heroTypingBounce 1s ease-in-out infinite;
+        }
+        .hero-typing i:nth-child(2) { animation-delay: 0.15s; }
+        .hero-typing i:nth-child(3) { animation-delay: 0.3s; }
+        @keyframes heroTypingBounce {
+          0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
+          40% { transform: translateY(-3px); opacity: 1; }
+        }
+        .hero-thermal-label {
+          display: flex;
+          justify-content: space-between;
+          padding: 0.4rem 0.7rem 0.15rem;
+          font-size: 9px;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--home-faint);
+          flex-shrink: 0;
+        }
+        .hero-thermal-label span:last-child {
+          color: color-mix(in srgb, var(--home-accent) 75%, transparent);
+        }
+        .hero-sil {
+          flex: 1;
+          min-height: 0;
+          overflow: hidden;
+          padding: 0.25rem 0.55rem 0.6rem;
+        }
+        .hero-sil-line {
+          display: flex;
+          align-items: baseline;
+          gap: 0.4rem;
+          font-size: 10px;
+          line-height: 1.7;
+          white-space: pre;
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        .hero-sil-line.is-in {
+          animation: silGrowIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        .hero-sil-line.is-new {
+          animation: silGrowNew 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        @keyframes silGrowIn {
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes silGrowNew {
+          0% { opacity: 0; transform: translateY(10px) scaleX(0.96); filter: brightness(1.4); }
+          100% { opacity: 1; transform: translateY(0) scaleX(1); filter: brightness(1); }
+        }
+        .hero-sil-ln {
+          width: 1rem;
+          text-align: right;
+          color: var(--home-faint);
+          flex-shrink: 0;
+          font-size: 9px;
+        }
+        .hero-sil-kw { color: #FFD24A; font-weight: 600; }
+        .hero-sil-block {
+          color: #E0A85C;
+          background: rgba(224,168,92,0.14);
+          border-radius: 2px;
+          padding: 0 1px;
+          letter-spacing: 0.02em;
+        }
+        .hero-sil.is-coding .hero-sil-block {
+          animation: heroSilShimmer 1.8s ease-in-out infinite;
+        }
+        @keyframes heroSilShimmer {
+          0%, 100% { opacity: 0.35; }
+          50% { opacity: 0.9; }
+        }
+        .hero-sil-blank { height: 10px; }
+        .hero-sil-empty {
+          padding: 0.6rem 0.7rem;
+          display: flex;
+          flex-direction: column;
+          gap: 7px;
+        }
+        .hero-sil-bar {
+          height: 8px;
+          border-radius: 3px;
+          background: var(--home-panel-2);
+          animation: heroSilShimmer 1.6s ease-in-out infinite;
+        }
+        .hero-sil-empty p {
+          margin: 0.4rem 0 0;
+          font-size: 9px;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          color: var(--home-faint);
+          text-align: center;
+        }
+
+        /* Auto-scrolling platform stats */
+        .stats-ticker {
+          position: relative;
+          overflow: hidden;
+          border: 1px solid var(--home-line);
+          border-radius: 6px;
+          background: color-mix(in srgb, var(--home-panel) 70%, transparent);
+          margin-bottom: 2rem;
+          mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+          -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+        }
+        .stats-ticker-track {
+          display: flex;
+          width: max-content;
+          gap: 0;
+          animation: statsTickerScroll 32s linear infinite;
+        }
+        .stats-ticker:hover .stats-ticker-track {
+          animation-play-state: paused;
+        }
+        @keyframes statsTickerScroll {
+          from { transform: translateX(0); }
+          to   { transform: translateX(-50%); }
+        }
+        .stats-ticker-item {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          justify-content: center;
+          gap: 0.2rem;
+          padding: 1rem 1.75rem;
+          border-right: 1px solid var(--home-line);
+          min-width: 9.5rem;
+          white-space: nowrap;
+        }
+        .stats-ticker-item strong {
+          font-size: 1.35rem;
+          font-weight: 700;
+          font-variant-numeric: tabular-nums;
+          color: var(--home-ink);
+          line-height: 1;
+        }
+        .stats-ticker-item span {
+          font-size: 10px;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: var(--home-faint);
+        }
+
+        /* Queue radar */
+        .queue-radar {
+          width: 100%;
+          margin: 0 0 1.25rem;
+        }
+        .queue-radar canvas {
+          display: block;
+          width: 100%;
+          height: 160px;
+        }
+        .queue-radar-meta {
+          margin: 0.15rem 0 0;
+          text-align: center;
+          font-size: 11px;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: var(--home-faint);
+        }
+
+        /* Match-found countdown */
+        .match-found-dialog {
+          animation: matchFoundIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+          max-width: 400px;
+        }
+        @keyframes matchFoundIn {
+          from { opacity: 0; transform: translateY(16px) scale(0.97); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .match-ring {
+          position: relative;
+          width: 104px;
+          height: 104px;
+          margin: 0 auto 1.4rem;
+        }
+        .match-ring svg {
+          width: 104px;
+          height: 104px;
+          transform: rotate(-90deg);
+          filter: drop-shadow(0 0 12px rgba(0,255,133,0.25));
+        }
+        .match-ring-count {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: 'Manrope', sans-serif;
+          font-weight: 800;
+          font-size: 2rem;
+          font-variant-numeric: tabular-nums;
+          animation: matchCountPulse 1s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes matchCountPulse {
+          0% { transform: scale(1.18); opacity: 0.4; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        .match-ring-glow {
+          position: absolute;
+          inset: 8px;
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(0,255,133,0.12), transparent 70%);
+          pointer-events: none;
+          animation: matchGlow 2s ease-in-out infinite;
+        }
+        @keyframes matchGlow {
+          0%, 100% { opacity: 0.55; transform: scale(0.96); }
+          50% { opacity: 1; transform: scale(1.04); }
+        }
+        .search-dialog {
+          animation: matchFoundIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+          max-width: 420px;
+        }
+        .start-countdown-num {
+          animation: matchCountPulse 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .hero-chip-dot,
+          .hero-typing i,
+          .hero-sil.is-coding .hero-sil-block,
+          .hero-sil-bar,
+          .hero-presence,
+          .hero-presence-text,
+          .hero-presence-dot,
+          .hero-sil-line.is-in,
+          .hero-sil-line.is-new,
+          .hero-problem-body,
+          .hero-caret,
+          .hero-run-spin,
+          .hero-topbar-timer.is-urgent,
+          .match-found-dialog,
+          .search-dialog,
+          .match-ring-count,
+          .match-ring-glow,
+          .start-countdown-num,
+          .stats-ticker-track { animation: none !important; }
+          .hero-sil-line { opacity: 1; transform: none; }
+        }
       `}</style>
 
-      {/* ════════════════════════════════════════════════════════════
-          NAVBAR
-      ════════════════════════════════════════════════════════════ */}
-      <nav className="fixed top-4 left-0 w-full z-50 px-5">
+      <Navbar />
 
-  <div className="max-w-[82rem] mx-auto h-[72px] px-10 flex items-center justify-between rounded-full border border-[var(--color-border)]/60 bg-[var(--color-surface)]/25 backdrop-blur-2xl backdrop-saturate-150 shadow-[0_8px_32px_rgba(0,0,0,0.2)]">
-
-    {/* LOGO */}
-    <div
-      onClick={() =>
-        window.scrollTo({
-          top: 0,
-          behavior: 'smooth'
-        })
-      }
-      className="flex items-center gap-3 cursor-pointer select-none"
-    >
-
-      <h1 className="font-claude text-[40px] font-extrabold tracking-[-2px] leading-none">
-
-        <span className="text-[var(--color-text-primary)]">
-          DUAL
-        </span>
-
-        <span className="text-[#F4B183]">
-          DEV
-        </span>
-
-      </h1>
-
-    </div>
-
-    {/* NAV LINKS */}
-    <div className="hidden md:flex items-center gap-14">
-
-      {[
-        {
-          label: "Leaderboard",
-          id:    null,
-          route: "/leaderboard",
-        },
-        {
-          label: "Insights",
-          id:    null,
-          route: "/insights",
-        }
-      ].map((item) => (
-
-        <button
-          key={item.label}
-          onClick={() => {
-            if (item.route) {
-              navigate(item.route)
-            } else if (item.id) {
-              document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth' })
-            }
-          }}
-          className="cursor-pointer text-[16px] font-medium tracking-wide text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-all duration-300"
-        >
-
-          {item.label}
-
-        </button>
-
-      ))}
-
-    </div>
-
-    {/* RIGHT */}
-    <div className="flex items-center gap-4">
-
-      {/* THEME TOGGLE */}
-      <button
-        onClick={toggleTheme}
-        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
-        className="cursor-pointer h-10 w-10 flex items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)] transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[#00FF85]"
-      >
-        {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-      </button>
-
-      {isAuthenticated ? (
-        <>
-          {/* USER */}
-          <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)]">
-
-            <span className="w-2 h-2 rounded-full bg-[#00FF85] animate-pulse" />
-
-            <span className="text-sm text-[var(--color-text-primary)]">
-              {currentUser?.username}
-            </span>
-
-            <span className="text-sm font-semibold text-[#00FF85]">
-              {currentUser?.rating}
-            </span>
-
+      <div className={`hq-bar ${quoteRevealed ? 'is-revealed' : ''}`} aria-live="polite">
+        <div className="hq-row">
+          <div className="hq-stage">
+            <h2 className={`hq-quote ${quotePhase === 'out' ? 'is-out' : ''}`}>
+              {quotesReady ? typedQuoteText : '…'}
+              {quotesReady && quotePhase === 'in' && typedQuoteText.length < activeQuoteText.length && (
+                <span className="hq-cursor" aria-hidden="true" />
+              )}
+            </h2>
           </div>
 
-          {/* MODES BUTTON */}
-          <button
-            onClick={() =>
-              document
-                .getElementById('battle-modes')
-                ?.scrollIntoView({
-                  behavior: 'smooth'
-                })
-            }
-            className="cursor-pointer h-12 px-7 rounded-full bg-[#FF7A00] hover:bg-[#ff8800] text-white text-[15px] font-semibold transition-all duration-300 hover:scale-[1.03] focus-visible:outline-2 focus-visible:outline-white"
-          >
-
-            Modes
-
-          </button>
-
-          {/* LOGOUT BUTTON */}
-          <button
-            onClick={handleLogout}
-            className="cursor-pointer h-12 px-5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] hover:bg-red-500/10 hover:border-red-500/30 text-[var(--color-text-secondary)] hover:text-[#FF5A5A] text-[14px] font-medium transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[#FF5A5A]"
-            title="Logout"
-          >
-            Logout
-          </button>
-        </>
-      ) : (
-        <>
-          {/* LOGIN BUTTON */}
-          <button
-            onClick={() => navigate('/login')}
-            className="cursor-pointer h-12 px-6 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] hover:border-[var(--color-text-muted)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] text-[14px] font-medium transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[#00FF85]"
-          >
-            Login
-          </button>
-
-          {/* SIGN UP BUTTON */}
-          <button
-            onClick={() => navigate('/login')}
-            className="cursor-pointer h-12 px-7 rounded-full bg-[#00FF85] hover:brightness-110 text-black text-[15px] font-semibold transition-all duration-300 hover:scale-[1.03] focus-visible:outline-2 focus-visible:outline-white"
-          >
-            Sign Up
-          </button>
-        </>
-      )}
-
-    </div>
-
-  </div>
-
-</nav>
-
-      {/* Inline mobile-width warning toast (Task 5) — non-blocking, replaces alert() */}
-      <AnimatePresence>
-        {mobileWarning && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.25 }}
-            className="fixed top-24 left-1/2 -translate-x-1/2 z-[400] bg-[var(--color-border)] border border-[#FF7A00]/40 text-[#FF7A00] text-sm font-medium px-5 py-3 rounded-xl shadow-xl max-w-sm text-center"
-            role="alert"
-          >
-            {mobileWarning}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ════════════════════════════════════════════════════════════
-          HERO
-      ════════════════════════════════════════════════════════════ */}
-      <section  id="home" className="dot-grid relative px-6 pt-36 pb-20 text-center overflow-hidden">
-        {/* green glow blob */}
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-[radial-gradient(ellipse,rgba(0,255,133,0.07)_0%,transparent_70%)] pointer-events-none" />
-
-        {/* status badges */}
-        <div className="flex gap-3 justify-center mb-12 flex-wrap">
-          <span className="flex items-center gap-2 bg-white/[0.03] border border-[var(--color-border)] rounded-full px-4 py-2 font-mono-display text-[11px] text-[var(--color-text-secondary)]">
-            <span className="live-dot w-1.5 h-1.5 rounded-full bg-[#ead24a] shrink-0" />
-            {battlesLiveNow} battles live now
-          </span>
-          <span className="flex items-center gap-2 bg-white/[0.03] border border-[var(--color-border)] rounded-full px-4 py-2 font-mono-display text-[11px] text-[var(--color-text-secondary)]">
-            <Zap size={12} className="text-[#dbf362]" />
-            Avg match: 8 mins
-          </span>
-        </div>
-
-        {/* headline */}
-        <h1 className="font-mono-display font-bold text-[var(--color-text-primary)] leading-[1.05] tracking-tight mb-5"
-          style={{ fontSize: 'clamp(42px, 7vw, 94px)' }}>
-          Code.&nbsp;&nbsp;Compete.<br />
-          <span className="text-[#00FF85]">Dominate.</span>
-        </h1>
-        <p className="text-[var(--color-text-muted)] text-[15px] tracking-wide mb-10">
-          Real-time 1v1 coding battles. Ranked. Live. Brutal.
-        </p>
-
-        {/* ── CTAs / searching / room states ── */}
-        {!isSearching && !roomId && !pendingMatch && (
-          <div className="flex gap-4 justify-center flex-wrap mb-2">
-            <button
-              className="glow-btn bg-[#00FF85] text-black font-mono-display font-bold text-xs tracking-widest px-9 py-4 rounded-md hover:brightness-110 transition-all"
-              onClick={() => { setMode("random"); setShowModal(true) }}
-            >
-              Play with Random
-            </button>
-            <button
-              className="cursor-pointer bg-[var(--color-surface-2)] text-[var(--color-text-primary)] border-2 border-[#FF7A00]/40 font-mono-display font-bold text-xs tracking-widest px-9 py-4 rounded-md hover:border-[#FF7A00] hover:bg-[#FF7A00]/10 transition-all"
-              onClick={() => { setMode("friend"); setShowModal(true) }}
-            >
-              <Users size={14} className="inline -mt-0.5 mr-1" />Challenge Friend
-            </button>
-          </div>
-        )}
-
-        {/* Issue 3 — full-screen overlay so home page is blocked while searching.
-            Hidden when pendingMatch is set so the accept popup can show on top. */}
-        <AnimatePresence>
-        {isSearching && !pendingMatch && (
-          <motion.div
-            initial={reducedMotion ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={reducedMotion ? undefined : { opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="fixed inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center z-[200] gap-8">
-            {/* Animated radar rings */}
-            <div className="relative flex items-center justify-center">
-              <span className="absolute w-32 h-32 rounded-full border border-[#00FF85]/10 animate-ping" style={{ animationDuration:"2s" }} />
-              <span className="absolute w-20 h-20 rounded-full border border-[#00FF85]/20 animate-ping" style={{ animationDuration:"1.5s" }} />
-              <span className="w-12 h-12 rounded-full bg-[#00FF85]/10 border border-[#00FF85]/40 flex items-center justify-center">
-                <span className="w-4 h-4 rounded-full bg-[#00FF85] animate-pulse" />
-              </span>
-            </div>
-
-            <div className="text-center">
-              <div className="flex items-center justify-center gap-3 mb-2">
-                <span className="search-dot w-2 h-2 rounded-full bg-[#00FF85] inline-block" />
-                <span className="font-mono-display text-[13px] text-[#00FF85] tracking-[4px]">SEARCHING FOR OPPONENT</span>
-              </div>
-              <p className="font-mono-display text-[11px] text-[var(--color-text-muted)] tracking-wider mt-1">
-                {topic} · {difficulty}
-              </p>
-            </div>
-
-            {/* Countdown bar */}
-            <div className="w-64">
-              <div className="flex justify-between font-mono-display text-[10px] text-[var(--color-text-muted)] mb-2 tracking-wider">
-                <span>AUTO-CANCEL IN</span>
-                <span className={searchSecondsLeft <= 10 ? "text-[#FF4444]" : "text-[var(--color-text-secondary)]"}>{searchSecondsLeft}s</span>
-              </div>
-              <div className="w-full h-1 bg-[var(--color-border)] rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-1000"
-                  style={{
-                    width: `${(searchSecondsLeft / 30) * 100}%`,
-                    background: searchSecondsLeft <= 10 ? "#FF4444" : "#00FF85",
-                  }}
-                />
-              </div>
-            </div>
-
-            <MatchmakingRouteDiscovery />
-
-            <button
-              className="bg-[var(--color-surface-2)] text-[var(--color-text-primary)] border border-[var(--color-border)] font-mono-display font-bold text-xs tracking-widest px-8 py-3 rounded-md hover:border-[var(--color-text-muted)] transition-all"
-              onClick={cancelSearch}
-            >
-              Cancel Search
-            </button>
-          </motion.div>
-        )}
-        </AnimatePresence>
-
-        {roomId && (
-          <div className="inline-block bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-10 py-5 mt-4 text-center">
-            <p className="font-mono-display text-[10px] tracking-[3px] text-[var(--color-text-muted)] mb-3">SHARE ROOM ID</p>
-            <div className="flex items-center justify-center gap-3">
-              <span className="font-mono-display text-xl text-[#00FF85] tracking-[6px]">{roomId}</span>
+          <div className="hq-controls">
+            <div className="hq-votes">
               <button
-                className={`font-mono-display text-[11px] px-3 py-1 rounded transition-all border ${
-                  roomCopied
-                    ? "bg-[#00FF85]/10 text-[#00FF85] border-[#00FF85]/40"
-                    : "bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] border-[var(--color-border)] hover:border-[var(--color-text-muted)]"
-                }`}
-                onClick={() => {
-                  navigator.clipboard.writeText(roomId)
-                  setRoomCopied(true)
-                  setTimeout(() => setRoomCopied(false), 2000)
-                }}
+                type="button"
+                className="hq-vote"
+                aria-label="Like quote"
+                disabled={!quotesReady}
+                onClick={() => onQuoteVote('up')}
               >
-                {roomCopied ? (<span className="inline-flex items-center gap-1"><Check size={12}/> Copied!</span>) : "Copy"}
+                <ThumbsUp size={14} strokeWidth={2.25} />
+              </button>
+              <button
+                type="button"
+                className="hq-vote"
+                aria-label="Dislike quote"
+                disabled={!quotesReady}
+                onClick={() => onQuoteVote('down')}
+              >
+                <ThumbsDown size={14} strokeWidth={2.25} />
               </button>
             </div>
-            <p className="font-mono-display text-[10px] text-[var(--color-text-muted)] mt-3 tracking-wider">Waiting for opponent to join...</p>
-          </div>
-        )}
 
-        {/* join room input */}
-        {!isSearching && !roomId && !pendingMatch && (
-          <div className="flex flex-col items-center mt-10 gap-5">
-            {/* OR divider */}
-            <div className="flex items-center gap-4 w-full max-w-lg">
-              <div className="flex-1 h-px bg-[var(--color-border)]" />
-              <span className="font-mono-display text-sm text-[var(--color-text-muted)] tracking-[4px]">OR</span>
-              <div className="flex-1 h-px bg-[var(--color-border)]" />
-            </div>
-
-            <div className="w-full max-w-lg bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-6">
-              <p className="font-mono-display text-base text-[var(--color-text-primary)] font-bold tracking-wide text-center mb-1">
-                Join a Friend's Room
-              </p>
-              <p className="text-[var(--color-text-secondary)] text-sm text-center mb-5">
-                Paste the Room ID your friend shared with you
-              </p>
-              <div className="flex gap-3">
-                <input
-                  className="flex-1 bg-[var(--color-bg)] border-2 border-[#FF7A00]/40 text-[var(--color-text-primary)] font-mono-display text-base px-5 py-3.5 rounded-lg outline-none focus:border-[#FF7A00] transition-colors placeholder:text-[var(--color-text-muted)]"
-                  placeholder="Enter Room ID here..."
-                  value={friendRoomId}
-                  onChange={(e) => setFriendRoomId(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && friendRoomId && joinRoom()}
+            <div className="hq-progress" aria-hidden="true">
+              {(quotes.length ? quotes : Array.from({ length: QUOTE_BATCH })).map((_, i) => (
+                <span
+                  key={i}
+                  className={`hq-pill ${quotesReady && i === quoteIndex ? 'is-active' : ''}`}
                 />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {mobileWarning && (
+        <div
+          className="fixed top-16 left-1/2 -translate-x-1/2 z-[400] home-panel px-4 py-3 text-sm max-w-sm text-center"
+          style={{ color: 'var(--home-warn)' }}
+          role="alert"
+        >
+          {mobileWarning}
+        </div>
+      )}
+
+      {/* Hero */}
+      <main className="mx-auto max-w-6xl px-5 pt-8 pb-10 md:pt-14 md:pb-16">
+        <div className="grid gap-10 lg:grid-cols-[0.9fr_1.35fr] lg:items-center lg:gap-10">
+          <div className="flex flex-col justify-center">
+            <p className="text-[clamp(1.4rem,2.6vw,1.75rem)] leading-snug max-w-xl mb-3">
+              Real-time 1v1 coding battles.
+            </p>
+            <p className="home-muted text-[15px] leading-relaxed max-w-md mb-8">
+              Same problem. Same clock. Not just who submits first — an AI judge scores TLE, MLE, code structure, and more to decide the winner.
+            </p>
+
+            {!isSearching && !roomId && !pendingMatch && (
+              <div className="flex flex-wrap gap-3 mb-8">
                 <button
-                  className={`font-mono-display font-bold text-sm tracking-widest px-7 py-3.5 rounded-lg transition-all whitespace-nowrap ${
-                    friendRoomId
-                      ? 'bg-[#FF7A00] text-black hover:bg-[#ff8d32] hover:scale-[1.03]'
-                      : 'bg-[var(--color-border)] text-[var(--color-text-muted)] border border-[var(--color-border)] cursor-not-allowed'
-                  }`}
-                  onClick={joinRoom}
-                  disabled={!friendRoomId}
+                  type="button"
+                  className="home-btn home-btn-primary"
+                  onClick={() => { setMode('random'); setShowModal(true) }}
                 >
-                  <Users size={14} className="inline -mt-0.5 mr-1" />Join Room
+                  Play ranked
+                </button>
+                <button
+                  type="button"
+                  className="home-btn home-btn-secondary"
+                  onClick={() => { setMode('friend'); setShowModal(true) }}
+                >
+                  Challenge a friend
                 </button>
               </div>
-            </div>
+            )}
+
+            {roomId && (
+              <div className="home-panel rounded-md p-5 mb-8 max-w-md">
+                <p className="home-faint text-xs uppercase tracking-[0.14em] mb-2">Room ID</p>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <code className="text-xl tracking-[0.2em]" style={{ color: 'var(--home-accent)' }}>
+                    {roomId}
+                  </code>
+                  <button
+                    type="button"
+                    className="home-btn home-btn-secondary !h-9 text-sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(roomId)
+                      setRoomCopied(true)
+                      setTimeout(() => setRoomCopied(false), 2000)
+                    }}
+                  >
+                    {roomCopied ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+                <p className="home-muted text-sm mt-3">Waiting for your friend to join…</p>
+              </div>
+            )}
+
+            {!isSearching && !roomId && !pendingMatch && (
+              <div className="max-w-md">
+                <label className="home-faint text-xs uppercase tracking-[0.14em] block mb-2">
+                  Or join with a room ID
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    className="home-input"
+                    placeholder="Paste room ID"
+                    value={friendRoomId}
+                    onChange={(e) => setFriendRoomId(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && friendRoomId && joinRoom()}
+                  />
+                  <button
+                    type="button"
+                    className="home-btn home-btn-secondary shrink-0"
+                    onClick={joinRoom}
+                    disabled={!friendRoomId}
+                  >
+                    Join
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
+
+          <HeroStage />
+        </div>
+
+        {statsError && (
+          <p className="text-sm mt-4" style={{ color: '#E11D48' }}>
+            Stats unavailable — {statsError}
+          </p>
         )}
+      </main>
 
-        {/* ── terminal preview card ── */}
-        <div className="max-w-3xl mx-auto mt-16 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl overflow-hidden text-left shadow-2xl">
-
-  {/* macOS bar */}
-  <div className="bg-[var(--color-surface-2)] border-b border-[var(--color-border)] px-4 py-3 flex items-center gap-2">
-
-    <span className="w-3 h-3 rounded-full bg-[#FF5F57]" />
-    <span className="w-3 h-3 rounded-full bg-[#FEBC2E]" />
-    <span className="w-3 h-3 rounded-full bg-[#28C840]" />
-
-    <span className="flex-1 text-center font-mono-display text-[11px] text-[var(--color-text-muted)]">
-
-      Problem: Two Sum &nbsp;&nbsp;
-
-      <span className="bg-red-500/20 text-[#FF3355] border border-red-500/30 px-2 py-0.5 rounded text-[11px]">
-        ● {minutes}:{seconds}
-      </span>
-
-    </span>
-
-    <span className="font-mono-display text-[11px] text-[var(--color-text-muted)]">
-      Difficulty: Medium
-    </span>
-
-  </div>
-
-  {/* two panes */}
-  <div className="grid grid-cols-2">
-
-    {/* YOU */}
-    <div className="p-4 border-r border-[var(--color-border)]">
-
-      <div className="flex items-center gap-2 mb-4">
-
-        <span className="w-6 h-6 rounded-full bg-[#00FF85] flex items-center justify-center text-black font-bold text-[10px]">
-          Y
-        </span>
-
-        <span className="font-mono-display text-[11px] text-[var(--color-text-muted)]">
-          You (Python)
-        </span>
-
-      </div>
-
-      {typedUserCode.split('\n').map((line, i) => (
-
-  <div key={i} className="flex gap-4 mb-0.5">
-
-    <span className="font-mono-display text-[11px] text-[var(--color-border)] w-4 text-right shrink-0">
-      {i + 1}
-    </span>
-
-    <span className="font-mono-display text-[11px] text-[var(--color-text-primary)] whitespace-pre">
-
-      {line}
-
-      {i === typedUserCode.split('\n').length - 1 && (
-        <span className="typing-cursor text-[#00FF85]">
-          |
-        </span>
-      )}
-
-    </span>
-
-  </div>
-
-))}
-
-    </div>
-{/* OPPONENT */}
-<div className="p-4">
-
-  <div className="flex items-center gap-2 mb-4">
-
-    <span className="w-6 h-6 rounded-full bg-[#FF3355] flex items-center justify-center text-white font-bold text-[10px]">
-      O
-    </span>
-
-    <span className="font-mono-display text-[11px] text-[var(--color-text-muted)]">
-      ninja_coder (C++)
-    </span>
-
-  </div>
-
-  {typedOpponentCode.split('\n').map((line, i) => (
-
-  <div key={i} className="flex gap-4 mb-0.5">
-
-    <span className="font-mono-display text-[11px] text-[var(--color-border)] w-4 text-right shrink-0">
-      {i + 1}
-    </span>
-
-    <span className="font-mono-display text-[11px] text-[var(--color-text-secondary)] whitespace-pre">
-
-      {line}
-
-      {i === typedOpponentCode.split('\n').length - 1 && (
-        <span className="typing-cursor text-[#FF3355]">
-          |
-        </span>
-      )}
-
-    </span>
-
-  </div>
-
-))}
-
-</div>
-
-  </div>
-
-</div>
+      {/* How to play — short, text-only */}
+      <section className="border-t home-line">
+        <div className="mx-auto max-w-6xl px-5 py-14">
+          <StatsTicker
+            playersOnline={playersOnline}
+            totalUsers={totalUsers}
+            battlesPlayed={battlesPlayed}
+            battlesLiveNow={battlesLiveNow}
+            languages={languages}
+            problems={problems}
+            topics={topics}
+            loading={statsLoading}
+          />
+          <h2 className="home-display text-3xl mb-8">
+            {typedHowItWorksHeading}
+            {typedHowItWorksHeading.length < 'How a match works'.length && (
+              <span className="hq-cursor" aria-hidden="true" />
+            )}
+          </h2>
+          <ol className="grid gap-6 md:grid-cols-3">
+            {[
+              ['Queue or invite', 'Pick a topic and difficulty, or share a room ID with a friend.'],
+              ['Code head-to-head', 'Same problem, live timer. You see a silhouette of their code — not the source.'],
+              ['Tests decide', 'Submit against hidden tests. More passed wins; efficiency breaks ties.'],
+            ].map(([title, body], i) => (
+              <li key={title}>
+                <div className="home-faint text-xs uppercase tracking-[0.14em] mb-2">
+                  Step {i + 1}
+                </div>
+                <h3 className="text-lg font-semibold mb-2">{title}</h3>
+                <p className="home-muted text-sm leading-relaxed">{body}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
       </section>
 
-      {/* ════════════════════════════════════════════════════════════
-          STATS BAR
-      ════════════════════════════════════════════════════════════ */}
-      {/* PLATFORM STATS */}
-<div className="border-y border-[var(--color-border)] bg-[var(--color-bg)]">
-
-  {/* backend values */}
-  {/*
-    const totalMatches      = "1.2M+"
-    const totalLanguages    = 3
-    const matchmakingSpeed  = "120ms"
-    const judgeUptime       = "99.9%"
-    const playersOnline     = "2,431"
-  */}
-
-  {error && (
-    <div className="text-center py-2 font-mono-display text-[11px] text-[#FF4444] tracking-wider bg-red-500/5 border-b border-red-500/10">
-      Stats unavailable — {error}
-    </div>
-  )}
-  <div className="max-w-5xl mx-auto grid grid-cols-6 divide-x divide-[var(--color-border)] py-10 px-6">
-    {[
-      [totalUsers, 'Total Users'],
-      [playersOnline, 'Players Online'],
-      [battlesPlayed, 'Battles Played'],
-      [totalLanguages, 'Languages'],
-      [matchmakingSpeed, 'Match Speed'],
-      [judgeUptime, 'Judge Uptime']
-    ].map(([val, label]) => (
-      <div key={label} className="text-center px-4">
-        {loading ? (
-          <div className="h-[34px] w-20 mx-auto bg-white/10 rounded-md animate-pulse" />
-        ) : (
-          <div className="font-mono-display text-[34px] font-bold text-[#00FF85] tracking-tight">
-            {val}
-          </div>
-        )}
-        <div className="text-[var(--color-text-muted)] text-xs mt-1 uppercase tracking-[1px]">
-          {label}
-        </div>
-      </div>
-    ))}
-  </div>
-</div>
-      {/* ═════════════════════════════════════════════════════
-                    HOW IT WORKS
-        ═════════════════════════════════════════════════════ */}
-
-<section id="how-it-works" className="relative px-6 py-32 border-t border-[var(--color-border)] overflow-hidden">
-
-  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(0,255,133,0.05),transparent_45%)] pointer-events-none" />
-
-  <div className="max-w-6xl mx-auto relative z-10">
-
-    {/* HEADING */}
-    <div className="text-center mb-24">
-
-      <h2
-        className="font-claude text-[var(--color-text-primary)] font-bold tracking-[-3px] leading-none"
-        style={{ fontSize: 'clamp(42px,7vw,78px)' }}
-      >
-        How It Works
-      </h2>
-
-      <p className="text-white/40 text-[16px] mt-5 max-w-2xl mx-auto leading-relaxed">
-        Real-time coding battles where strategy matters as much as speed.
-      </p>
-
-    </div>
-
-    {/* STEPS */}
-    <div className="space-y-8">
-
-      {/* STEP 1 */}
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.2 }}
-        transition={{ duration: 0.5, ease: [0.16,1,0.3,1] }}
-        whileHover={{ scale: 1.01 }}
-        className="bg-[var(--color-surface)]/80 border border-white/10 rounded-[32px] p-8 md:p-12 backdrop-blur-xl">
-
-        <div className="grid md:grid-cols-2 gap-14 items-center">
-
-          {/* LEFT */}
-          <div>
-
-            <div className="flex items-center gap-5 mb-8">
-
-              <div className="w-12 h-12 rounded-2xl bg-[#00FF85] text-black flex items-center justify-center font-bold text-lg">
-                1
-              </div>
-
-              <div>
-
-                <div className="text-[#00FF85] text-xs tracking-[2px] uppercase mb-1">
-                  Matchmaking
-                </div>
-
-                <h3 className="font-claude text-[var(--color-text-primary)] text-[34px] font-bold tracking-[-1.5px]">
-                  Pick Your Battle
-                </h3>
-
-              </div>
-
-            </div>
-
-            <div className="space-y-5 text-[15px] text-white/70 leading-relaxed">
-
-              <div className="flex items-start gap-3">
-                <Target size={14} className="text-[#00FF85] mt-1 shrink-0" />
-                <span>
-                  Choose topic — Arrays, Graphs, DP, Trees, HashMaps
-                </span>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <Target size={14} className="text-[#00FF85] mt-1 shrink-0" />
-                <span>
-                  Select difficulty — Easy, Medium, or Hard
-                </span>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <Target size={14} className="text-[#00FF85] mt-1 shrink-0" />
-                <span>
-                  Find a live opponent matched by rating in seconds
-                </span>
-              </div>
-
-            </div>
-
-            <p className="mt-10 text-[#00FF85] text-sm font-medium tracking-wide">
-              No waiting. No setup. Just code.
-            </p>
-
-          </div>
-
-          {/* RIGHT */}
-          <div className="bg-black/40 border border-white/10 rounded-[28px] p-8">
-
-            <div className="flex items-center justify-between">
-
-              {/* USER */}
-              <div className="flex flex-col items-center">
-
-                <div className="w-16 h-16 rounded-2xl bg-[#00FF85]/10 border border-[#00FF85]/20 flex items-center justify-center">
-                  <div className="w-7 h-7 rounded-full bg-[#00FF85]" />
-                </div>
-
-                <span className="text-white/50 text-xs mt-3 tracking-wide">
-                  YOU
-                </span>
-
-              </div>
-
-              {/* LINE */}
-              <div className="flex-1 mx-5 h-[2px] bg-white/10 rounded-full overflow-hidden">
-
-                <div className="h-full w-1/3 bg-gradient-to-r from-[#00FF85] to-[#FF7A00] animate-pulse rounded-full" />
-
-              </div>
-
-              {/* OPPONENT */}
-              <div className="flex flex-col items-center">
-
-                <div className="w-16 h-16 rounded-2xl bg-[#FF7A00]/10 border border-[#FF7A00]/20 flex items-center justify-center">
-                  <div className="w-7 h-7 rounded-full bg-[#FF7A00]" />
-                </div>
-
-                <span className="text-white/50 text-xs mt-3 tracking-wide">
-                  OPPONENT
-                </span>
-
-              </div>
-
-            </div>
-
-            <div className="mt-12 bg-[#00FF85]/10 border border-[#00FF85]/20 rounded-2xl px-5 py-4 flex items-center justify-between">
-
-              <div>
-
-                <div className="text-[#00FF85] text-sm font-semibold">
-                  Match Found
-                </div>
-
-                <div className="text-white/40 text-xs mt-1">
-                  Rating difference: 21
-                </div>
-
-              </div>
-
-              <div className="font-mono-display text-[#00FF85] text-lg">
-                0.8s
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      </motion.div>
-
-      {/* STEP 2 */}
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.2 }}
-        transition={{ duration: 0.5, ease: [0.16,1,0.3,1] }}
-        whileHover={{ scale: 1.01 }}
-        className="bg-[var(--color-surface)]/80 border border-white/10 rounded-[32px] p-8 md:p-12 backdrop-blur-xl">
-
-        <div className="grid md:grid-cols-2 gap-14 items-center">
-
-          {/* LEFT */}
-          <div>
-
-            <div className="flex items-center gap-5 mb-8">
-
-              <div className="w-12 h-12 rounded-2xl bg-[#00FF85] text-black flex items-center justify-center font-bold text-lg">
-                2
-              </div>
-
-              <div>
-
-                <div className="text-[#00FF85] text-xs tracking-[2px] uppercase mb-1">
-                  Real-Time Coding
-                </div>
-
-                <h3 className="font-claude text-[var(--color-text-primary)] text-[34px] font-bold tracking-[-1.5px]">
-                  Code Live
-                </h3>
-
-              </div>
-
-            </div>
-
-            <div className="space-y-5 text-[15px] text-white/70 leading-relaxed">
-
-              <div className="flex items-start gap-3">
-                <Target size={14} className="text-[#00FF85] mt-1 shrink-0" />
-                <span>
-                  Your real code stays fully visible to you
-                </span>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <Target size={14} className="text-[#00FF85] mt-1 shrink-0" />
-                <span>
-                  Opponents only see a live silhouette of your logic
-                </span>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <Target size={14} className="text-[#00FF85] mt-1 shrink-0" />
-                <span>
-                  Adapt to strategies while racing against the clock
-                </span>
-              </div>
-
-            </div>
-
-            <p className="mt-10 text-[#00FF85] text-sm font-medium tracking-wide">
-              Feel the pressure. Stay focused.
-            </p>
-
-          </div>
-
-          {/* RIGHT */}
-          <div className="bg-black/40 border border-white/10 rounded-[28px] overflow-hidden">
-
-            {/* TOP BAR */}
-            <div className="border-b border-white/10 px-5 py-4 flex items-center gap-2">
-
-              <span className="w-3 h-3 rounded-full bg-[#FF5F57]" />
-              <span className="w-3 h-3 rounded-full bg-[#FEBC2E]" />
-              <span className="w-3 h-3 rounded-full bg-[#28C840]" />
-
-              <span className="ml-auto text-[11px] text-white/35 font-mono-display tracking-wide">
-                YOUR VIEW
-              </span>
-
-            </div>
-
-            <div className="grid grid-cols-2">
-
-              {/* YOUR CODE */}
-              <div className="p-5 border-r border-white/10">
-
-                <div className="flex items-center justify-between mb-5">
-
-                  <div className="text-[#00FF85] text-xs tracking-wide">
-                    YOUR CODE • PYTHON
-                  </div>
-
-                  <div className="w-2 h-2 rounded-full bg-[#00FF85] animate-pulse" />
-
-                </div>
-
-                <div className="space-y-1 font-mono-display text-[11px] text-white/90">
-
-                  <div>def two_sum(nums, target):</div>
-                  <div>    seen = {}</div>
-                  <div>    for i in range(len(nums)):</div>
-                  <div>        comp = target - nums[i]</div>
-                  <div>        if comp in seen:</div>
-                  <div className="text-[#00FF85]">█</div>
-
-                </div>
-
-              </div>
-
-              {/* OPPONENT VIEW */}
-              <div className="p-5">
-
-                <div className="flex items-center justify-between mb-5">
-
-                  <div className="text-[#FF7A00] text-xs tracking-wide">
-                    OPPONENT VIEW
-                  </div>
-
-                  <div className="w-2 h-2 rounded-full bg-[#FF7A00] animate-pulse" />
-
-                </div>
-
-                <div className="space-y-1 font-mono-display text-[11px] text-white/50">
-
-                  <div>def ▓▓▓▓▓▓(▓▓▓▓, ▓▓▓▓▓▓):</div>
-                  <div>    ▓▓▓▓ = {'{}'}</div>
-                  <div>    for ▓ in ▓▓▓▓▓▓▓▓(▓▓▓▓):</div>
-                  <div>        ▓▓▓▓ = ▓▓▓▓ - ▓▓▓▓[▓]</div>
-                  <div>        if ▓▓▓▓▓▓▓▓▓▓▓ in ▓▓▓▓:</div>
-
-                  <div className="text-[#FF7A00]">
-                    █
-                  </div>
-
-                </div>
-
-              </div>
-
-            </div>
-
-            <div className="border-t border-white/10 px-5 py-4 text-center text-[12px] text-white/40">
-              Your logic stays visible. Your implementation stays hidden.
-            </div>
-
-          </div>
-
-        </div>
-
-      </motion.div>
-
-      {/* STEP 3 */}
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.2 }}
-        transition={{ duration: 0.5, ease: [0.16,1,0.3,1] }}
-        whileHover={{ scale: 1.01 }}
-        className="bg-[var(--color-surface)]/80 border border-white/10 rounded-[32px] p-8 md:p-12 backdrop-blur-xl">
-
-        <div className="grid md:grid-cols-2 gap-14 items-center">
-
-          {/* LEFT */}
-          <div>
-
-            <div className="flex items-center gap-5 mb-8">
-
-              <div className="w-12 h-12 rounded-2xl bg-[#00FF85] text-black flex items-center justify-center font-bold text-lg">
-                3
-              </div>
-
-              <div>
-
-                <div className="text-[#00FF85] text-xs tracking-[2px] uppercase mb-1">
-                  AI Judge
-                </div>
-
-                <h3 className="font-claude text-[var(--color-text-primary)] text-[34px] font-bold tracking-[-1.5px]">
-                  AI Decides the Winner
-                </h3>
-
-              </div>
-
-            </div>
-
-            <div className="space-y-5 text-[15px] text-white/70 leading-relaxed">
-
-              <div className="flex items-start gap-3">
-                <Check size={14} className="text-[#00FF85] mt-1 shrink-0" />
-                <span>
-                  Evaluates test cases, runtime, and memory usage
-                </span>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <Check size={14} className="text-[#00FF85] mt-1 shrink-0" />
-                <span>
-                  Considers efficiency, submissions, and completion speed
-                </span>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <Check size={14} className="text-[#00FF85] mt-1 shrink-0" />
-                <span>
-                  Picks the strongest solution — not just the first solution
-                </span>
-              </div>
-
-            </div>
-
-            <p className="mt-10 text-[#00FF85] text-sm font-medium tracking-wide">
-              Not just who solved it — who solved it better.
-            </p>
-
-          </div>
-
-          {/* RIGHT */}
-          <div className="bg-black/40 border border-white/10 rounded-[28px] p-7">
-
-            <div className="flex items-center justify-between mb-8">
-
-              <div>
-
-                <div className="text-white/90 font-semibold text-lg">
-                  AI Match Review
-                </div>
-
-                <div className="text-white/40 text-xs mt-1">
-                  Evaluation completed in 184ms
-                </div>
-
-              </div>
-
-              <div className="px-5 py-2 rounded-full bg-[#00FF85]/10 border border-[#00FF85]/20 text-[#00FF85] text-sm font-semibold">
-                WINNER
-              </div>
-
-            </div>
-
-            <div className="space-y-5">
-
-              {[
-                ['Test Cases', '24 / 24'],
-                ['Runtime', '84ms'],
-                ['Memory Usage', '41MB'],
-                ['Efficiency', '98th percentile']
-              ].map(([label, value]) => (
-
-                <div key={label} className="flex items-center justify-between border-b border-white/5 pb-4">
-
-                  <span className="text-white/45 text-sm">
-                    {label}
-                  </span>
-
-                  <span className="text-white/90 text-sm font-medium">
-                    {value}
-                  </span>
-
-                </div>
-
-              ))}
-
-            </div>
-
-          </div>
-
-        </div>
-
-      </motion.div>
-
-    </div>
-
-  </div>
-
-</section>
-
-      {/* ════════════════════════════════════════════════════════════
-          BATTLE MODES
-      ════════════════════════════════════════════════════════════ */}
-      <section id="battle-modes" className="bg-[var(--color-bg)] border-y border-[var(--color-border)] px-6 py-28 overflow-hidden">
-
-  <div className="max-w-6xl mx-auto">
-
-    {/* HEADING */}
-    <div className="text-center mb-20">
-
-      <h2
-        className="font-claude text-[var(--color-text-primary)] font-bold tracking-[-3px] leading-none"
-        style={{ fontSize: 'clamp(42px,7vw,72px)' }}
-      >
-        Battle Modes
-      </h2>
-
-      <p className="text-white/40 text-[16px] mt-5 max-w-2xl mx-auto leading-relaxed">
-        Choose your battlefield. Queue into ranked matchmaking or challenge friends directly.
-      </p>
-
-    </div>
-
-    {/* MODES */}
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-
-      {/* RANDOM MATCHMAKING */}
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.2 }}
-        transition={{ duration: 0.5, ease: [0.16,1,0.3,1] }}
-        whileHover={{ scale: 1.02 }}
-        className="bg-[var(--color-surface)] border border-white/10 rounded-[32px] p-8 backdrop-blur-xl relative overflow-hidden">
-
-        {/* glow */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-[#00FF85]/5 blur-3xl rounded-full pointer-events-none" />
-
-        {/* top */}
-        <div className="flex items-start justify-between mb-8">
-
-          <div>
-
-            <div className="w-14 h-14 rounded-2xl bg-[#00FF85]/10 border border-[#00FF85]/20 flex items-center justify-center text-[#00FF85] text-2xl mb-5">
-              <Swords size={22} />
-            </div>
-
-            <h3 className="font-claude text-[var(--color-text-primary)] text-[34px] font-bold tracking-[-1.5px]">
-              Play With Random
-            </h3>
-
-          </div>
-
-          <div className="px-4 py-2 rounded-full bg-[#00FF85]/10 border border-[#00FF85]/20 text-[#00FF85] text-xs tracking-[1px] uppercase">
-            Most Popular
-          </div>
-
-        </div>
-
-        {/* description */}
-        <p className="text-white/65 text-[15px] leading-relaxed mb-10">
-          Select a topic and difficulty, enter the matchmaking queue, and get paired instantly with a live opponent near your rating.
-        </p>
-
-        {/* flow */}
-        <div className="space-y-5 mb-10">
-
-          <div className="flex items-start gap-4">
-
-            <div className="w-8 h-8 rounded-xl bg-[#00FF85]/10 border border-[#00FF85]/20 flex items-center justify-center text-[#00FF85] text-sm shrink-0">
-              1
-            </div>
-
-            <div>
-
-              <div className="text-[var(--color-text-primary)] text-sm font-medium mb-1">
-                Choose Difficulty & Topic
-              </div>
-
-              <div className="text-white/45 text-[13px] leading-relaxed">
-                Pick Easy, Medium, or Hard and select concepts like Arrays, Graphs, DP, Trees, or HashMaps.
-              </div>
-
-            </div>
-
-          </div>
-
-          <div className="flex items-start gap-4">
-
-            <div className="w-8 h-8 rounded-xl bg-[#00FF85]/10 border border-[#00FF85]/20 flex items-center justify-center text-[#00FF85] text-sm shrink-0">
-              2
-            </div>
-
-            <div>
-
-              <div className="text-[var(--color-text-primary)] text-sm font-medium mb-1">
-                Enter Matchmaking Queue
-              </div>
-
-              <div className="text-white/45 text-[13px] leading-relaxed">
-                Players are matched only if both selected the same difficulty and topic.
-              </div>
-
-            </div>
-
-          </div>
-
-          <div className="flex items-start gap-4">
-
-            <div className="w-8 h-8 rounded-xl bg-[#00FF85]/10 border border-[#00FF85]/20 flex items-center justify-center text-[#00FF85] text-sm shrink-0">
-              3
-            </div>
-
-            <div>
-
-              <div className="text-[var(--color-text-primary)] text-sm font-medium mb-1">
-                Balanced Rating Matchups
-              </div>
-
-              <div className="text-white/45 text-[13px] leading-relaxed">
-                Opponents are searched within your rating range:
-              </div>
-
-              <div className="mt-3 font-mono-display text-[#00FF85] text-[13px] bg-[#00FF85]/5 border border-[#00FF85]/10 rounded-xl px-4 py-3 inline-block">
-                rating - 100 → rating + 100
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
-
-        {/* tags */}
-        <div className="flex flex-wrap gap-2">
-
-          {[
-            'Arrays',
-            'Graphs',
-            'Dynamic Programming',
-            'HashMaps',
-            'Trees',
-            'Greedy'
-          ].map((tag) => (
-
-            <span
-              key={tag}
-              className="border border-white/10 bg-white/[0.03] text-white/45 text-[11px] px-4 py-2 rounded-full"
+      <footer className="border-t home-line">
+        <div className="mx-auto max-w-6xl px-5 py-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <span className="brand-wordmark text-[28px]">
+            <span className="brand-dual">DUAL</span>
+            <span className="brand-dev">DEV</span>
+          </span>
+          <div className="flex flex-col sm:items-end gap-1">
+            <span className="home-faint text-xs">© 2026 DualDev</span>
+            <a
+              href="https://www.chattrapate.xyz/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="home-faint text-xs hover:underline"
             >
-              {tag}
-            </span>
-
-          ))}
-
-        </div>
-
-      </motion.div>
-
-      {/* PLAY WITH FRIEND */}
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.2 }}
-        transition={{ duration: 0.5, ease: [0.16,1,0.3,1] }}
-        whileHover={{ scale: 1.02 }}
-        className="bg-[var(--color-surface)] border border-white/10 rounded-[32px] p-8 backdrop-blur-xl relative overflow-hidden">
-
-        {/* glow */}
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-[#FF7A00]/5 blur-3xl rounded-full pointer-events-none" />
-
-        {/* top */}
-        <div className="flex items-start justify-between mb-8">
-
-          <div>
-
-            <div className="w-14 h-14 rounded-2xl bg-[#FF7A00]/10 border border-[#FF7A00]/20 flex items-center justify-center text-[#FF7A00] text-2xl mb-5">
-              <Users size={22} />
-            </div>
-
-            <h3 className="font-claude text-[var(--color-text-primary)] text-[34px] font-bold tracking-[-1.5px]">
-              Play With Friend
-            </h3>
-
-          </div>
-
-          <div className="px-4 py-2 rounded-full bg-[#FF7A00]/10 border border-[#FF7A00]/20 text-[#FF7A00] text-xs tracking-[1px] uppercase">
-            Private Match
-          </div>
-
-        </div>
-
-        {/* description */}
-        <p className="text-white/65 text-[15px] leading-relaxed mb-10">
-          Create a private battle room, share the room code, and compete directly against friends in real-time.
-        </p>
-
-        {/* flow */}
-        <div className="space-y-5 mb-10">
-
-          <div className="flex items-start gap-4">
-
-            <div className="w-8 h-8 rounded-xl bg-[#FF7A00]/10 border border-[#FF7A00]/20 flex items-center justify-center text-[#FF7A00] text-sm shrink-0">
-              1
-            </div>
-
-            <div>
-
-              <div className="text-[var(--color-text-primary)] text-sm font-medium mb-1">
-                Create Battle Room
-              </div>
-
-              <div className="text-white/45 text-[13px] leading-relaxed">
-                Host selects difficulty, topic, timer, and generates a unique room ID.
-              </div>
-
-            </div>
-
-          </div>
-
-          <div className="flex items-start gap-4">
-
-            <div className="w-8 h-8 rounded-xl bg-[#FF7A00]/10 border border-[#FF7A00]/20 flex items-center justify-center text-[#FF7A00] text-sm shrink-0">
-              2
-            </div>
-
-            <div>
-
-              <div className="text-[var(--color-text-primary)] text-sm font-medium mb-1">
-                Friend Joins Using Room ID
-              </div>
-
-              <div className="text-white/45 text-[13px] leading-relaxed">
-                Share the generated room code and instantly join the same live battle.
-              </div>
-
-            </div>
-
-          </div>
-
-          <div className="flex items-start gap-4">
-
-            <div className="w-8 h-8 rounded-xl bg-[#FF7A00]/10 border border-[#FF7A00]/20 flex items-center justify-center text-[#FF7A00] text-sm shrink-0">
-              3
-            </div>
-
-            <div>
-
-              <div className="text-[var(--color-text-primary)] text-sm font-medium mb-1">
-                Real-Time Head-to-Head Match
-              </div>
-
-              <div className="text-white/45 text-[13px] leading-relaxed">
-                Solve the same problem simultaneously while tracking each other's live coding silhouette.
-              </div>
-
-            </div>
-
-          </div>
-
-        </div>
-
-        {/* room preview */}
-        <div className="bg-black/40 border border-white/10 rounded-2xl p-5">
-
-          <div className="flex items-center justify-between mb-4">
-
-            <div>
-
-              <div className="text-white/90 text-sm font-medium">
-                Private Room
-              </div>
-
-              <div className="text-white/40 text-xs mt-1">
-                Invite your friend instantly
-              </div>
-
-            </div>
-
-            <div className="w-2 h-2 rounded-full bg-[#00FF85] animate-pulse" />
-
-          </div>
-
-          <div className="flex items-center justify-between bg-white/[0.03] border border-white/10 rounded-xl px-4 py-4">
-
-            <div>
-
-              <div className="text-white/40 text-[11px] mb-1">
-                ROOM ID
-              </div>
-
-              <div className="font-mono-display text-[#FF7A00] tracking-[2px] text-lg">
-                DX9K2P
-              </div>
-
-            </div>
-
-            <button className="px-4 py-2 rounded-xl bg-[#FF7A00] hover:bg-[#ff8d32] transition-all duration-300 text-black text-sm font-semibold">
-              Copy
-            </button>
-
-          </div>
-
-        </div>
-
-      </motion.div>
-
-    </div>
-
-  </div>
-
-</section>
-
-      {/* ════════════════════════════════════════════════════════════
-          FOOTER
-      ════════════════════════════════════════════════════════════ */}
-      <footer className="bg-[var(--color-bg)] border-t border-[var(--color-border)] px-6 pt-12 pb-7">
-        <div className="max-w-5xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-[2fr_1fr_1fr_1fr_1fr] gap-10 mb-10">
-            <div>
-              <span className="font-mono-display font-bold text-sm tracking-widest">
-                <span className="text-[var(--color-text-primary)]">Dual</span><span className="text-[#00FF85]">Dev</span>
-              </span>
-              <p className="text-[var(--color-text-muted)] text-xs leading-relaxed mt-3 max-w-[200px]">
-                The ultimate platform for competitive coders. Battle in real-time, climb the ranks, and prove your skills.
-              </p>
-              <div className="flex gap-2 mt-4">
-                {['X','in','+'].map(icon => (
-                  <span key={icon} className="w-8 h-8 border border-[var(--color-border)] rounded-md flex items-center justify-center text-[var(--color-text-muted)] text-xs cursor-pointer hover:border-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] transition-all">{icon}</span>
-                ))}
-              </div>
-            </div>
-            {[
-              ['Product', ['Features','Pricing','Leaderboard','API']],
-              ['Resources', ['Documentation','Blog','Problems','Discord']],
-              ['Company', ['About','Careers','Contact','Press']],
-              ['Legal', ['Privacy','Terms','Cookies']],
-            ].map(([title, links]) => (
-              <div key={title}>
-                <h4 className="font-mono-display text-[var(--color-text-primary)] text-[11px] tracking-widest mb-4">{title}</h4>
-                {links.map(l => (
-                  <div
-                    key={l}
-                    onClick={l === 'Pricing' ? () => navigate('/pricing') : l === 'Leaderboard' ? () => navigate('/leaderboard') : undefined}
-                    className="text-[var(--color-text-muted)] text-xs mb-2.5 cursor-pointer hover:text-[var(--color-text-secondary)] transition-colors"
-                  >
-                    {l}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-          <div className="border-t border-[var(--color-border)] pt-5 flex items-center justify-between">
-            <span className="font-mono-display text-[11px] text-[var(--color-text-muted)]">© 2026 DualDev. All rights reserved.</span>
-            <span className="font-mono-display text-[11px] text-[var(--color-text-muted)] flex items-center gap-2">
-              <span className="live-dot w-1.5 h-1.5 rounded-full bg-[#00FF85] inline-block" />
-              All systems operational
-            </span>
+              Developer: Chattrapate
+            </a>
           </div>
         </div>
       </footer>
 
-      {/* ════════════════════════════════════════════════════════════
-          OVERLAYS
-      ════════════════════════════════════════════════════════════ */}
+      {/* Searching — queue radar pairing */}
+      {isSearching && !pendingMatch && (
+        <div className="home-overlay" style={{ zIndex: 200 }}>
+          <div className="home-dialog search-dialog text-center">
+            <p className="home-faint text-xs uppercase tracking-[0.16em] mb-2">Searching</p>
+            <h2 className="home-display text-3xl mb-1">Finding opponent</h2>
+            <QueueRadar topic={topic} difficulty={difficulty} />
+            <div className="mb-6">
+              <div className="flex justify-between text-xs home-faint mb-2">
+                <span>Auto-cancel</span>
+                <span style={{ color: searchSecondsLeft <= 10 ? '#E11D48' : 'inherit' }}>
+                  {searchSecondsLeft}s
+                </span>
+              </div>
+              <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--home-line)' }}>
+                <div
+                  className="h-full rounded-full transition-[width] duration-1000 linear"
+                  style={{
+                    width: `${(searchSecondsLeft / 30) * 100}%`,
+                    background: searchSecondsLeft <= 10 ? '#E11D48' : 'var(--home-accent)',
+                  }}
+                />
+              </div>
+            </div>
+            <button type="button" className="home-btn home-btn-secondary w-full" onClick={cancelSearch}>
+              Cancel search
+            </button>
+          </div>
+        </div>
+      )}
 
-      {/* Accept / Decline popup — z-[300] keeps it above the searching overlay */}
-      <AnimatePresence>
+      {/* Accept / decline — premium countdown */}
       {pendingMatch && (
-        <motion.div
-          initial={reducedMotion ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={reducedMotion ? undefined : { opacity: 0 }}
-          transition={{ duration: 0.25 }}
-          className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[300]">
-          <motion.div
-            initial={reducedMotion ? false : { opacity: 0, y: 20, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={reducedMotion ? undefined : { opacity: 0, y: 20, scale: 0.97 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-10 min-w-[340px] text-center">
-            <h2 className="font-mono-display text-[#00FF85] text-lg font-bold mb-2"><span className="inline-flex items-center gap-2"><Swords size={16}/> Match Found!</span></h2>
-            <p className="text-[var(--color-text-secondary)] text-sm mb-1">
-              vs <strong className="text-[var(--color-text-primary)]">{pendingMatch.opponent?.username}</strong>
-              <span className="text-[#00FF85] font-mono-display ml-2">{pendingMatch.opponent?.rating}</span>
+        <div className="home-overlay" style={{ zIndex: 300 }}>
+          <div className="home-dialog match-found-dialog text-center">
+            <p className="home-faint text-xs uppercase tracking-[0.16em] mb-3">Match found</p>
+            <h2 className="home-display text-3xl mb-2">
+              vs {pendingMatch.opponent?.username}
+            </h2>
+            <p className="home-muted text-sm mb-1">
+              Rating {pendingMatch.opponent?.rating}
             </p>
-            <p className="text-[#F59E0B] font-mono-display text-xs tracking-wider mb-8">
+            <p className="text-sm mb-4" style={{ color: 'var(--home-warn)' }}>
               {pendingMatch.problem?.title} · {pendingMatch.problem?.difficulty}
             </p>
-            
-            {/*  Matching reason */}
             {pendingMatch.reason && (
-              <div className="mb-6 bg-[#00FF85]/10 border border-[#00FF85]/20 rounded-xl px-4 py-3 text-[#00FF85] text-xs font-mono-display">
+              <p className="home-panel rounded-md px-3 py-2 text-xs mb-5" style={{ color: 'var(--home-accent)' }}>
                 {pendingMatch.reason}
-              </div>
+              </p>
             )}
 
-            {/* countdown ring */}
-            <div className="relative w-20 h-20 mx-auto mb-8">
-              <svg width="80" height="80" className="-rotate-90">
-                <circle cx="40" cy="40" r="34" fill="none" stroke="var(--color-border)" strokeWidth="4" />
-                <circle cx="40" cy="40" r="34" fill="none" stroke="#00FF85" strokeWidth="4"
+            <div className="match-ring">
+              <div className="match-ring-glow" />
+              <svg width="104" height="104" viewBox="0 0 104 104">
+                <circle cx="52" cy="52" r="44" fill="none" stroke="var(--home-line)" strokeWidth="4" />
+                <circle
+                  cx="52" cy="52" r="44" fill="none" stroke="var(--home-accent)" strokeWidth="4"
                   strokeDasharray={ringCircumference}
                   strokeDashoffset={ringOffset}
                   strokeLinecap="round"
                   style={{ transition: 'stroke-dashoffset 1s linear' }}
                 />
               </svg>
-              <span className="absolute inset-0 flex items-center justify-center font-mono-display text-xl font-bold text-[var(--color-text-primary)]">
+              <span key={acceptCountdown} className="match-ring-count">
                 {acceptCountdown}
               </span>
             </div>
 
             {waitingAccept ? (
-              <div className="flex items-center justify-center gap-2 text-[#00FF85] font-mono-display text-xs tracking-wider">
-                <span className="search-dot w-2 h-2 rounded-full bg-[#00FF85] inline-block" />
-                Accepted — waiting for opponent...
-              </div>
+              <p className="home-muted text-sm">Accepted — waiting for opponent…</p>
             ) : (
-              <div className="flex gap-3 justify-center">
-                <button
-                  onClick={acceptMatch}
-                  className="bg-[#00FF85] text-black font-mono-display font-bold text-xs tracking-widest px-6 py-3 rounded-md hover:brightness-110 transition-all"
-                >
-                  <span className="inline-flex items-center gap-1"><Check size={14}/> Accept</span>
+              <div className="flex gap-2 justify-center">
+                <button type="button" className="home-btn home-btn-primary" onClick={acceptMatch}>
+                  <Check size={14} /> Accept
                 </button>
-                <button
-                  onClick={declineMatch}
-                  className="bg-red-500/10 text-[#FF3355] border border-red-500/30 font-mono-display font-bold text-xs tracking-widest px-6 py-3 rounded-md hover:bg-red-500/15 transition-all"
-                >
-                  <span className="inline-flex items-center gap-1"><X size={14}/> Decline</span>
+                <button type="button" className="home-btn home-btn-danger" onClick={declineMatch}>
+                  <X size={14} /> Decline
                 </button>
               </div>
             )}
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       )}
-      </AnimatePresence>
 
-      {/* Match starting countdown */}
-      <AnimatePresence>
+      {/* Match starting */}
       {startCountdown !== null && startCountdown > 0 && (
-        <motion.div
-          initial={reducedMotion ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={reducedMotion ? undefined : { opacity: 0 }}
-          transition={{ duration: 0.25 }}
-          className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[200]">
-          <motion.div
-            initial={reducedMotion ? false : { opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={reducedMotion ? undefined : { opacity: 0, scale: 0.9 }}
-            transition={{ duration: 0.3 }}
-            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl px-16 py-12 text-center">
-            <div className="font-mono-display text-[72px] font-bold text-[#00FF85] leading-none mb-3">{startCountdown}</div>
-            <p className="font-mono-display text-[var(--color-text-muted)] text-[11px] tracking-[4px]">MATCH STARTING</p>
-          </motion.div>
-        </motion.div>
+        <div className="home-overlay">
+          <div className="home-dialog match-found-dialog text-center">
+            <div
+              key={startCountdown}
+              className="home-display text-7xl leading-none mb-3 start-countdown-num"
+              style={{ color: 'var(--home-accent)' }}
+            >
+              {startCountdown}
+            </div>
+            <p className="home-faint text-xs uppercase tracking-[0.16em]">Match starting</p>
+          </div>
+        </div>
       )}
-      </AnimatePresence>
 
-      {/* Match config modal */}
-      <AnimatePresence>
+      {/* Config modal */}
       {showModal && (
-        <motion.div
-          initial={reducedMotion ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={reducedMotion ? undefined : { opacity: 0 }}
-          transition={{ duration: 0.25 }}
-          className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center z-[200]">
-          <motion.div
-            initial={reducedMotion ? false : { opacity: 0, y: 20, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={reducedMotion ? undefined : { opacity: 0, y: 20, scale: 0.97 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-            className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-10 min-w-[320px]">
-            <h3 className="font-mono-display text-[var(--color-text-primary)] text-sm tracking-[3px] mb-7">
-              {mode === "random" ? (<span className="inline-flex items-center gap-2"><Target size={14}/> FIND MATCH</span>) : (<span className="inline-flex items-center gap-2"><Link2 size={14}/> CHALLENGE FRIEND</span>)}
+        <div className="home-overlay" onClick={() => setShowModal(false)}>
+          <div className="home-dialog" onClick={(e) => e.stopPropagation()}>
+            <h3 className="home-display text-2xl mb-1">
+              {typedModalHeading}
+              {typedModalHeading.length < modalHeadingText.length && (
+                <span className="hq-cursor" aria-hidden="true" />
+              )}
             </h3>
+            <p className="home-muted text-sm mb-6">
+              {mode === 'random'
+                ? 'Matched with someone near your rating.'
+                : 'Share the room ID after you create it.'}
+            </p>
 
-            <div className="flex flex-col gap-1.5 mb-4">
-              <label className="font-mono-display text-[10px] tracking-[2px] text-[var(--color-text-muted)]">TOPIC</label>
-              <select
-                className="bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text-primary)] font-mono-display text-sm px-3 py-2.5 rounded-md outline-none focus:border-[#00FF85]/50 transition-colors"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-              >
-                <option value="Array">Array</option>
-                <option value="HashMap">HashMap</option>
-                <option value="String">String</option>
-              </select>
-            </div>
+            <label className="home-faint text-xs uppercase tracking-[0.14em] block mb-2">Topic</label>
+            <select className="home-select mb-4" value={topic} onChange={(e) => setTopic(e.target.value)}>
+              {TOPICS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
 
-            <div className="flex flex-col gap-1.5 mb-8">
-              <label className="font-mono-display text-[10px] tracking-[2px] text-[var(--color-text-muted)]">DIFFICULTY</label>
-              <select
-                className="bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text-primary)] font-mono-display text-sm px-3 py-2.5 rounded-md outline-none focus:border-[#00FF85]/50 transition-colors"
-                value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value)}
-              >
-                <option value="Easy">Easy</option>
-                <option value="Medium">Medium</option>
-                <option value="Hard">Hard</option>
-              </select>
-            </div>
+            <label className="home-faint text-xs uppercase tracking-[0.14em] block mb-2">Difficulty</label>
+            <select className="home-select mb-6" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
+              {DIFFICULTIES.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
 
-            <div className="flex gap-3">
+            <div className="flex gap-2">
               <button
-                onClick={mode === "random" ? joinMatch : createRoom}
-                className="bg-[#00FF85] text-black font-mono-display font-bold text-xs tracking-widest px-6 py-3 rounded-md hover:brightness-110 transition-all"
+                type="button"
+                className="home-btn home-btn-primary flex-1"
+                onClick={mode === 'random' ? joinMatch : createRoom}
               >
-                {mode === "random" ? "Find Match" : "Create Room"}
+                {mode === 'random' ? 'Find match' : 'Create room'}
               </button>
-              <button
-                onClick={() => setShowModal(false)}
-                className="bg-[var(--color-surface-2)] text-[var(--color-text-primary)] border border-[var(--color-border)] font-mono-display font-bold text-xs tracking-widest px-6 py-3 rounded-md hover:border-[var(--color-text-muted)] transition-all"
-              >
+              <button type="button" className="home-btn home-btn-secondary" onClick={() => setShowModal(false)}>
                 Cancel
               </button>
             </div>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       )}
-      </AnimatePresence>
-
     </div>
   )
 }

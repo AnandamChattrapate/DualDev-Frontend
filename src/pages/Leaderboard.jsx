@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { Sun, Moon } from 'lucide-react'
 import useMatchStore from '../store/matchStore'
-import useThemeStore from '../store/themeStore'
+import Navbar from '../components/layout/Navbar.jsx'
 
 /* ────────────────────────────────────────────────────────────
    /leaderboard
@@ -105,8 +104,6 @@ export default function Leaderboard() {
   const navigate        = useNavigate()
   const isAuthenticated = useMatchStore((s) => s.isAuthenticated)
   const currentUser     = useMatchStore((s) => s.currentUser)
-  const theme           = useThemeStore((s) => s.theme)
-  const toggleTheme     = useThemeStore((s) => s.toggleTheme)
 
   const [top,      setTop]      = useState([])
   const [me,       setMe]       = useState(null)
@@ -175,64 +172,10 @@ export default function Leaderboard() {
         .fade-up { animation: fadeUp 0.4s ease forwards; }
       `}</style>
 
-      {/* ── Minimal nav (just back to home + brand) ── */}
-      <nav className="fixed top-4 left-0 w-full z-50 px-5">
-        <div className="max-w-[82rem] mx-auto h-[72px] px-10 flex items-center justify-between rounded-full border border-[var(--color-border)]/60 bg-[var(--color-surface)]/25 backdrop-blur-2xl backdrop-saturate-150 shadow-[0_8px_32px_rgba(0,0,0,0.2)]">
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-3 cursor-pointer select-none"
-          >
-            <h1 className="font-claude text-[40px] font-extrabold tracking-[-2px] leading-none">
-              <span className="text-[var(--color-text-primary)]">DUAL</span>
-              <span className="text-[#F4B183]">DEV</span>
-            </h1>
-          </button>
-
-          <div className="hidden md:flex items-center gap-14">
-            <button
-              onClick={() => navigate('/')}
-              className="cursor-pointer text-[16px] font-medium tracking-wide text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-all duration-300"
-            >
-              Home
-            </button>
-            <span className="text-[16px] font-medium tracking-wide text-[var(--color-text-primary)]">
-              Leaderboard
-            </span>
-            <button
-              onClick={() => navigate('/insights')}
-              className="cursor-pointer text-[16px] font-medium tracking-wide text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-all duration-300"
-            >
-              Insights
-            </button>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <button
-              onClick={toggleTheme}
-              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
-              className="cursor-pointer h-10 w-10 flex items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)] transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[#00FF85]"
-            >
-              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-
-            <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)]">
-              <span className="w-2 h-2 rounded-full bg-[#00FF85] animate-pulse" />
-              {currentUser ? (
-                <>
-                  <span className="text-sm text-[var(--color-text-primary)]">{currentUser.username}</span>
-                  <span className="text-sm font-semibold text-[#00FF85]">{currentUser.rating}</span>
-                </>
-              ) : (
-                <span className="text-sm text-[var(--color-text-secondary)]">Guest</span>
-              )}
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Navbar />
 
       {/* ── Header ── */}
-      <section className="dot-grid relative px-6 pt-36 pb-12 text-center overflow-hidden">
+      <section className="dot-grid relative px-6 pt-16 pb-12 text-center overflow-hidden">
         <div className="max-w-2xl mx-auto fade-up">
           <div className="flex items-center justify-center gap-3 mb-3 flex-wrap">
             <h2

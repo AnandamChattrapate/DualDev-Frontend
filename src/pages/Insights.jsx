@@ -6,6 +6,7 @@ import useMatchStore from '../store/matchStore'
 import useThemeStore from '../store/themeStore'
 import LineChart from '../components/charts/LineChart'
 import BarChart from '../components/charts/BarChart'
+import { displayMatches, displayUsers, formatStat } from '../lib/displayStats.js'
 
 /* ────────────────────────────────────────────────────────────
    /insights
@@ -205,11 +206,42 @@ export default function Insights() {
 
       {/* ── Summary tiles ── */}
       <section className="px-6 pb-10">
-        <div className="max-w-5xl mx-auto bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl grid grid-cols-4 divide-x divide-[var(--color-border)] py-8 px-6">
-          <StatTile label="Total Users"    value={summary?.totalUsers ?? 0}      loading={loading} />
-          <StatTile label="Players Online" value={summary?.playersOnline ?? 0}   loading={loading} />
-          <StatTile label="Live Matches"   value={summary?.liveMatchesNow ?? 0}  loading={loading} />
-          <StatTile label="Total Matches"  value={summary?.totalMatches ?? 0}    loading={loading} />
+        <div className="max-w-5xl mx-auto bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 divide-x divide-[var(--color-border)] py-8 px-2 sm:px-4 gap-y-6">
+          <StatTile
+            label="Online"
+            value={formatStat(summary?.playersOnline ?? 0)}
+            loading={loading}
+          />
+          <StatTile
+            label="Total Users"
+            value={formatStat(displayUsers(summary?.totalUsers))}
+            loading={loading}
+          />
+          <StatTile
+            label="Total Matches"
+            value={formatStat(displayMatches(summary?.totalMatches))}
+            loading={loading}
+          />
+          <StatTile
+            label="Current Battles"
+            value={formatStat(summary?.liveMatchesNow ?? 0)}
+            loading={loading}
+          />
+          <StatTile
+            label="Languages"
+            value={formatStat(summary?.languages ?? 3)}
+            loading={loading}
+          />
+          <StatTile
+            label="Problems"
+            value={formatStat(summary?.problems ?? 0)}
+            loading={loading}
+          />
+          <StatTile
+            label="Topics"
+            value={formatStat(summary?.topics ?? 0)}
+            loading={loading}
+          />
         </div>
       </section>
 

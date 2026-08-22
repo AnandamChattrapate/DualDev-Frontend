@@ -38,6 +38,7 @@ export const tokenize = (code, language) => {
 
   const keywords = KEYWORDS[language] || KEYWORDS.python
   const lines = code.split('\n')
+  const blocks = (n) => '▓'.repeat(Math.max(0, n))
 
   return lines.map((line) => {
     // Split on whitespace OR punctuation, but capture everything
@@ -47,22 +48,23 @@ export const tokenize = (code, language) => {
       // whitespace — preserve exactly
       if (/^\s+$/.test(token)) return token
 
-      // Handle string literals
-      if (/^["'`]/.test(token) && /["'`]$/.test(token)) {
-        return token[0] + '▓'.repeat(token.length - 2) + token[token.length - 1]
+      // Handle complete string literals only (partial quotes while typing
+      // can be a single `"` / `'` — never call repeat with length-2 < 0)
+      if (token.length >= 2 && /^["'`]/.test(token) && /["'`]$/.test(token)) {
+        return token[0] + blocks(token.length - 2) + token[token.length - 1]
       }
 
       // keywords — show as-is
       if (keywords.has(token)) return token
 
       // numbers — replace with same length ▓
-      if (/^\d+(\.\d+)?$/.test(token)) return '▓'.repeat(token.length)
+      if (/^\d+(\.\d+)?$/.test(token)) return blocks(token.length)
 
       // operators and punctuation — show as-is
       if (/^[{}()[\],.:;+\-*/%=<>!&|^~?#]+$/.test(token)) return token
 
       // everything else (identifiers) — replace with ▓
-      if (token.trim().length > 0) return '▓'.repeat(token.length)
+      if (token.trim().length > 0) return blocks(token.length)
 
       return token
     }).join('')

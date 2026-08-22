@@ -10,6 +10,7 @@ import Result from "./pages/Result"
 import Leaderboard from "./pages/Leaderboard"
 import Pricing from "./pages/Pricing"
 import Insights from "./pages/Insights"
+import Profile from "./pages/Profile"
 import Login from "./components/auth/login"
 import useThemeStore from "./store/themeStore.js"
 
@@ -39,6 +40,7 @@ function App() {
         { path: "leaderboard",     element: <Leaderboard /> },
         { path: "pricing",         element: <Pricing /> },
         { path: "insights",        element: <Insights /> },
+        { path: "profile",         element: <Profile /> },
       ],
     },
   ])
