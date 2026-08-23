@@ -10,7 +10,7 @@ import ProblemPanel from "../components/match/ProblemPanel"
 import EditorPanel from "../components/match/EditorPanel"
 import OpponentPanel from "../components/match/OpponentPanel"
 import {
-  IconPlay, IconCheck, IconSparkles, IconSun, IconMoon, IconClose,
+  IconPlay, IconCheck, IconSun, IconMoon, IconClose,
   IconChat, IconSend,
 } from "../components/match/icons"
 
@@ -72,9 +72,6 @@ const GLOBAL_CSS = `
   }
   .btn-accent:hover:not(:disabled) { filter: brightness(1.06); border-color: var(--accent); }
 
-  .btn-ai { color: var(--text-2); }
-  .btn-ai:hover:not(:disabled) { color: var(--text); border-color: var(--muted); }
-
   /* ── Surfaces ── */
   .panel {
     background: var(--s1); border: 1px solid var(--border);
@@ -98,16 +95,6 @@ const GLOBAL_CSS = `
   .tc-pass { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
   .tc-fail { background: var(--danger-soft); border-color: var(--danger-line); color: var(--danger); }
   .tc-wait { background: var(--s2); border-color: var(--border); color: var(--muted); }
-
-  .ai-textarea {
-    width: 100%; background: var(--bg);
-    border: 1px solid var(--border); border-radius: 4px;
-    color: var(--text); font-family: var(--sans); font-size: 14px;
-    padding: 9px 11px; resize: none; line-height: 1.5;
-    transition: border-color 0.15s ease; caret-color: var(--accent);
-  }
-  .ai-textarea:focus { outline: none; border-color: var(--muted); }
-  .ai-textarea::placeholder { color: var(--muted); }
 
   .resizer {
     width: 6px; flex-shrink: 0; cursor: col-resize;
@@ -210,7 +197,6 @@ const GLOBAL_CSS = `
   .btn:focus-visible,
   .strip-tab:focus-visible,
   select.lang-select:focus-visible,
-  .ai-textarea:focus-visible,
   .chat-input:focus-visible,
   .icon-btn:focus-visible {
     outline: 2px solid var(--accent);
@@ -299,7 +285,6 @@ export default function Match() {
   const oppTotalTests      = useMatchStore((s) => s.oppTotalTests)
   const oppSilhouette      = useMatchStore((s) => s.oppSilhouette)
   const timeLeft           = useMatchStore((s) => s.timeLeft)
-  const aiUsageLeft        = useMatchStore((s) => s.aiUsageLeft)
   const firstBlood         = useMatchStore((s) => s.firstBlood)
   const firstBloodBy       = useMatchStore((s) => s.firstBloodBy)
   const userId             = useMatchStore((s) => s.currentUser?._id)
@@ -315,7 +300,6 @@ export default function Match() {
   const tickTimer             = useMatchStore((s) => s.tickTimer)
   const setTimeLeftFromServer = useMatchStore((s) => s.setTimeLeftFromServer)
   const incrementSubmission   = useMatchStore((s) => s.incrementSubmission)
-  const incrementAIUsage      = useMatchStore((s) => s.incrementAIUsage)
   const setAIReview           = useMatchStore((s) => s.setAIReview)
   const setWinner             = useMatchStore((s) => s.setWinner)
   const setOppPresence        = useMatchStore((s) => s.setOppPresence)
@@ -329,10 +313,6 @@ export default function Match() {
 
   const [runResults,     setRunResults]     = useState([])
   const [isRunning,      setIsRunning]      = useState(false)
-  const [aiResponse,     setAIResponse]     = useState(null)
-  const [aiLoading,      setAILoading]      = useState(false)
-  const [aiQuestion,     setAIQuestion]     = useState("")
-  const [showAIPanel,    setShowAIPanel]    = useState(false)
   const [matchEnded,     setMatchEnded]     = useState(false)
   const [rightW,         setRightW]         = useState(340)
   const [networkOffline, setNetworkOffline] = useState(false)
@@ -632,19 +612,6 @@ export default function Match() {
     } catch { setSubmitting(false) }
   }
 
-  const askAI = async () => {
-    if (aiUsageLeft <= 0 || !aiQuestion.trim() || !incrementAIUsage()) return
-    try {
-      setAILoading(true)
-      await axios.post(`${import.meta.env.VITE_API_URL}/api/match/ai-usage`, { matchId }, { withCredentials: true })
-      const r = await axios.post(`${import.meta.env.VITE_API_URL}/api/ai/hint`,
-        { question: aiQuestion, problemTitle: problem?.title, description: problem?.description, code: myCode, language: myLanguage },
-        { withCredentials: true })
-      setAIResponse(r.data.hint); setAIQuestion("")
-    } catch { /* hint failed — usage is already counted, nothing to surface */ }
-    finally { setAILoading(false) }
-  }
-
   const formatTime = (s) => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`
 
   const timerColor = timeLeft <= 60 ? "var(--danger)" : timeLeft <= 300 ? "var(--warn)" : "var(--text)"
@@ -753,15 +720,6 @@ export default function Match() {
           )}
         </div>
 
-        <button
-          className="btn btn-ai"
-          onClick={() => setShowAIPanel((v) => !v)}
-          aria-pressed={showAIPanel}
-          aria-label="Toggle AI assistant"
-          style={showAIPanel ? { borderColor: "var(--muted)", background: "var(--s2)", color: "var(--text)" } : undefined}
-        >
-          <IconSparkles s={13} /> AI <span style={{ opacity: 0.6 }}>{aiUsageLeft}</span>
-        </button>
         <button className="btn" onClick={runCode} disabled={isRunning || timeLeft <= 0 || matchEnded} aria-label="Run sample tests">
           <IconPlay s={12} /> {isRunning ? "Running" : "Run"}
         </button>
@@ -899,47 +857,6 @@ export default function Match() {
           </div>
         )}
 
-        {/* AI floating panel */}
-        {showAIPanel && (
-          <div
-            className="panel fade-in"
-            style={{ position: "absolute", top: 0, right: 0, width: 340, maxWidth: "calc(100% - 16px)", zIndex: 60, boxShadow: "0 8px 28px rgba(0,0,0,0.18)" }}
-          >
-            <div className="panel-header">
-              <IconSparkles s={13} />
-              <span className="label">AI Assistant</span>
-              <span style={{ marginLeft: "auto" }}>{aiUsageLeft} left</span>
-              <button
-                className="icon-btn"
-                onClick={() => setShowAIPanel(false)}
-                style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", display: "inline-flex", padding: 2, borderRadius: 4 }}
-                title="Close AI assistant"
-                aria-label="Close AI assistant"
-              ><IconClose s={14} /></button>
-            </div>
-            <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-              <textarea
-                className="ai-textarea"
-                rows={3}
-                value={aiQuestion}
-                onChange={(e) => setAIQuestion(e.target.value)}
-                placeholder="Ask for a hint about the problem…"
-              />
-              <button className="btn" onClick={askAI} disabled={aiLoading || aiUsageLeft <= 0} style={{ justifyContent: "center" }}>
-                {aiLoading ? "Thinking…" : "Ask AI"}
-              </button>
-              {aiResponse && (
-                <div style={{
-                  background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 4,
-                  padding: "10px 12px", fontSize: 14, lineHeight: 1.6, color: "var(--text)",
-                  maxHeight: 240, overflowY: "auto", whiteSpace: "pre-wrap",
-                }}>
-                  {aiResponse}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
