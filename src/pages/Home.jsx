@@ -331,6 +331,9 @@ export default function Home() {
       setSearching(false); setRoomId(null); alert(reason)
     })
     socket.on('match_starting', ({ seconds }) => {
+      // Both players already accepted by this point — drop the accept
+      // dialog so it doesn't sit stacked underneath the countdown overlay.
+      setPendingMatch(null); setWaitingAccept(false)
       setStartCountdown(seconds)
       let remaining = seconds
       const interval = setInterval(() => {

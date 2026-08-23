@@ -546,7 +546,7 @@ function PlayerCard({ player, label, color, testsPassed, totalTests, time, langu
       <div className="space-y-5">
         <Row label="Tests Passed">
           <span className="font-semibold" style={{ color }}>
-            {totalTests > 0 ? `${testsPassed}/${totalTests}` : `${testsPassed}`}
+            {totalTests > 0 ? `${testsPassed}/${totalTests}` : "—"}
           </span>
         </Row>
         {totalTests > 0 && (
