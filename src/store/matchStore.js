@@ -10,12 +10,12 @@ const DEFAULT_STARTER = {
   java:   'import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        \n    }\n}',
 }
 
-// TEMP: matches backend's temporarily shortened MATCH_DURATION_SECONDS —
-// revert both together once testing is done.
+// Must stay in sync with the backend's MATCH_DURATION_SECONDS in
+// services/matchStateService.js.
 const MATCH_DURATION = {
-  Easy:   120, // was 900
-  Medium: 180, // was 1500
-  Hard:   300, // was 2400
+  Easy:   900,
+  Medium: 1500,
+  Hard:   2400,
 }
 
 const useMatchStore = create(
