@@ -425,7 +425,7 @@ function PlayerCard({ player, label, color, testsPassed, totalTests, time, langu
         <div className="flex items-center justify-between">
           <span className="text-white/45 text-sm">Tests Passed</span>
           <span className="font-semibold" style={{ color }}>
-            {totalTests > 0 ? `${testsPassed}/${totalTests} ✓` : `${testsPassed} ✓`}
+            {totalTests > 0 ? `${testsPassed}/${totalTests} ✓` : "—"}
           </span>
         </div>
         {totalTests > 0 && (

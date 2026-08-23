@@ -144,7 +144,9 @@ export default function Profile() {
                 { label: 'Losses', value: currentUser.losses ?? 0 },
                 { label: 'Win rate', value: rate == null ? '—' : `${rate}%` },
                 { label: 'Matches', value: currentUser.totalMatches ?? 0 },
-                { label: 'Accuracy', value: `${currentUser.accuracy ?? 0}%` },
+                // "0%" reads as "you're bad at this" — only meaningful once
+                // they've actually played; show "—" before that instead.
+                { label: 'Accuracy', value: !currentUser.totalMatches ? '—' : `${currentUser.accuracy ?? 0}%` },
                 { label: 'Solved', value: solved },
                 { label: 'Record', value: `${currentUser.wins ?? 0}–${currentUser.losses ?? 0}` },
               ].map((item) => (
