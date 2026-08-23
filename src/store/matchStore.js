@@ -10,10 +10,12 @@ const DEFAULT_STARTER = {
   java:   'import java.util.*;\npublic class Main {\n    public static void main(String[] args) {\n        \n    }\n}',
 }
 
+// TEMP: matches backend's temporarily shortened MATCH_DURATION_SECONDS —
+// revert both together once testing is done.
 const MATCH_DURATION = {
-  Easy:   900, // must match backend's MATCH_DURATION_SECONDS.Easy
-  Medium: 1500,
-  Hard:   2400,
+  Easy:   120, // was 900
+  Medium: 180, // was 1500
+  Hard:   300, // was 2400
 }
 
 const useMatchStore = create(
@@ -210,9 +212,12 @@ const useMatchStore = create(
       },
 
       setMyVerdict: ({ verdict, results, testsPassed, totalTests }) => {
-        const { firstBlood } = get()
+        const { firstBlood, myTestsPassed } = get()
         if (!firstBlood && testsPassed > 0) set({ firstBlood: true, firstBloodBy: 'me' })
-        set({ myVerdict: verdict, myTCResults: results, myTestsPassed: testsPassed, myTotalTests: totalTests || results?.length || 0, isSubmitting: false })
+        // Keep the best submission, not the latest — a worse resubmit
+        // shouldn't erase an already-passing score.
+        const best = Math.max(myTestsPassed || 0, testsPassed)
+        set({ myVerdict: verdict, myTCResults: results, myTestsPassed: best, myTotalTests: totalTests || results?.length || 0, isSubmitting: false })
       },
 
       setOppSilhouette: (silhouette) => set({ oppSilhouette: silhouette }),
@@ -238,12 +243,14 @@ const useMatchStore = create(
       setMyConnection: (status) => set({ myConnection: status }),
 
       setOppProgress: ({ testsPassed, totalTests }) => {
-        const { firstBlood } = get()
+        const { firstBlood, oppTestsPassed } = get()
         if (!firstBlood && testsPassed > 0) set({ firstBlood: true, firstBloodBy: 'opponent' })
-        set({ oppTestsPassed: testsPassed, oppTotalTests: totalTests })
+        set({ oppTestsPassed: Math.max(oppTestsPassed || 0, testsPassed), oppTotalTests: totalTests })
       },
 
-      setOppVerdict: ({ verdict, testsPassed }) => set({ oppVerdict: verdict, oppTestsPassed: testsPassed }),
+      setOppVerdict: ({ verdict, testsPassed }) => set((s) => ({
+        oppVerdict: verdict, oppTestsPassed: Math.max(s.oppTestsPassed || 0, testsPassed),
+      })),
 
       // Authoritative final stats from the server's match_result event — overrides
       // whatever was pieced together from live socket events, which may have been
