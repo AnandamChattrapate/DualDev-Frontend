@@ -1,12 +1,12 @@
 import { useNavigate } from 'react-router-dom'
-import { Sun, Moon } from 'lucide-react'
 import useMatchStore from '../store/matchStore'
-import useThemeStore from '../store/themeStore'
+import Navbar from '../components/layout/Navbar.jsx'
 
 /* ────────────────────────────────────────────────────────────
    /profile
    Matches the visual language of Leaderboard.jsx:
    var(--color-bg) bg, Space Mono display, themed green accent, dot-grid.
+   Uses the shared <Navbar /> so every page carries the same header.
    Fields come straight from the authenticated user in matchStore
    (populated via /api/auth/me on load).
    ──────────────────────────────────────────────────────────── */
@@ -24,8 +24,6 @@ export default function Profile() {
   const navigate        = useNavigate()
   const isAuthenticated = useMatchStore((s) => s.isAuthenticated)
   const currentUser     = useMatchStore((s) => s.currentUser)
-  const theme           = useThemeStore((s) => s.theme)
-  const toggleTheme     = useThemeStore((s) => s.toggleTheme)
 
   const rate = currentUser ? winRate(currentUser.wins, currentUser.losses) : null
   const solved = currentUser ? solveCount(currentUser.solvedProblems) : 0
@@ -45,52 +43,12 @@ export default function Profile() {
         .fade-up { animation: fadeUp 0.4s ease forwards; }
       `}</style>
 
-      {/* ── Minimal nav (matches Leaderboard.jsx) ── */}
-      <nav className="fixed top-4 left-0 w-full z-50 px-5">
-        <div className="max-w-[82rem] mx-auto h-[72px] px-10 flex items-center justify-between rounded-full border border-[var(--color-border)]/60 bg-[var(--color-surface)]/25 backdrop-blur-2xl backdrop-saturate-150 shadow-[0_8px_32px_rgba(0,0,0,0.2)]">
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-3 cursor-pointer select-none"
-          >
-            <h1 className="font-claude text-[40px] font-extrabold tracking-[-2px] leading-none">
-              <span className="text-[var(--color-text-primary)]">DUAL</span>
-              <span className="text-[#F4B183]">DEV</span>
-            </h1>
-          </button>
-
-          <div className="hidden md:flex items-center gap-14">
-            <button
-              onClick={() => navigate('/')}
-              className="cursor-pointer text-[16px] font-medium tracking-wide text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-all duration-300"
-            >
-              Home
-            </button>
-            <button
-              onClick={() => navigate('/leaderboard')}
-              className="cursor-pointer text-[16px] font-medium tracking-wide text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-all duration-300"
-            >
-              Leaderboard
-            </button>
-            <span className="text-[16px] font-medium tracking-wide text-[var(--color-text-primary)]">
-              Profile
-            </span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <button
-              onClick={toggleTheme}
-              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
-              className="cursor-pointer h-10 w-10 flex items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-muted)] transition-all duration-300 focus-visible:outline-2 focus-visible:outline-[var(--color-accent-green)]"
-            >
-              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-          </div>
-        </div>
-      </nav>
+      <Navbar />
 
       {!isAuthenticated || !currentUser ? (
-        <section className="dot-grid min-h-screen flex items-center justify-center px-6 text-center">
+        /* Navbar is 3.5rem of normal flow above this, so subtract it rather
+           than using a full min-h-screen and overflowing the viewport. */
+        <section className="dot-grid min-h-[calc(100vh-3.5rem)] flex items-center justify-center px-6 text-center">
           <div className="fade-up">
             <h2 className="font-mono-display font-bold text-2xl mb-2">Log in to view your profile</h2>
             <p className="text-[var(--color-text-muted)] text-sm mb-6">
@@ -106,7 +64,7 @@ export default function Profile() {
         </section>
       ) : (
         <>
-          <section className="dot-grid relative px-6 pt-36 pb-10">
+          <section className="dot-grid relative px-6 pt-16 pb-10">
             <div className="max-w-3xl mx-auto fade-up flex flex-col md:flex-row md:items-center gap-6">
               {currentUser.avatar ? (
                 <img
@@ -144,9 +102,7 @@ export default function Profile() {
                 { label: 'Losses', value: currentUser.losses ?? 0 },
                 { label: 'Win rate', value: rate == null ? '—' : `${rate}%` },
                 { label: 'Matches', value: currentUser.totalMatches ?? 0 },
-                // "0%" reads as "you're bad at this" — only meaningful once
-                // they've actually played; show "—" before that instead.
-                { label: 'Accuracy', value: !currentUser.totalMatches ? '—' : `${currentUser.accuracy ?? 0}%` },
+                { label: 'Accuracy', value: `${currentUser.accuracy ?? 0}%` },
                 { label: 'Solved', value: solved },
                 { label: 'Record', value: `${currentUser.wins ?? 0}–${currentUser.losses ?? 0}` },
               ].map((item) => (
