@@ -65,7 +65,6 @@ const useMatchStore = create(
       isSubmitting:    false,
       submissionCount: 0,
       aiUsageCount:    0,
-      aiUsageLeft:     5,
       matchStartTime:  null,
 
       opponent:       null,
@@ -154,7 +153,6 @@ const useMatchStore = create(
           isSubmitting:    false,
           submissionCount: 0,
           aiUsageCount:    0,
-          aiUsageLeft:     5,
           matchStartTime:  Date.now(),
           oppSilhouette:   '',
           oppTestsPassed:  0,
@@ -200,16 +198,6 @@ const useMatchStore = create(
       setSubmitting: (val) => set({ isSubmitting: val }),
 
       incrementSubmission: () => set((state) => ({ submissionCount: state.submissionCount + 1 })),
-
-      incrementAIUsage: () => {
-        const { aiUsageLeft } = get()
-        if (aiUsageLeft <= 0) return false
-        set((state) => ({
-          aiUsageCount: state.aiUsageCount + 1,
-          aiUsageLeft:  state.aiUsageLeft - 1,
-        }))
-        return true
-      },
 
       setMyVerdict: ({ verdict, results, testsPassed, totalTests }) => {
         const { firstBlood, myTestsPassed } = get()
@@ -301,7 +289,6 @@ const useMatchStore = create(
           isSubmitting:    false,
           submissionCount: 0,
           aiUsageCount:    0,
-          aiUsageLeft:     5,
           matchStartTime:  null,
           opponent:        null,
           oppSilhouette:   '',
@@ -344,7 +331,6 @@ const useMatchStore = create(
         oppTestsPassed:  state.oppTestsPassed,
         oppTotalTests:   state.oppTotalTests,
         oppLanguage:     state.oppLanguage,
-        aiUsageLeft:     state.aiUsageLeft,
         matchStartTime:  state.matchStartTime,
         myRatingBefore:  state.myRatingBefore,
         myRatingAfter:   state.myRatingAfter,
