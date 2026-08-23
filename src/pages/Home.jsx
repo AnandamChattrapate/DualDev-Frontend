@@ -130,7 +130,26 @@ export default function Home() {
   const setSearching    = useMatchStore((s) => s.setSearching)
   const initMatch       = useMatchStore((s) => s.initMatch)
 
-  const [mobileWarning, setMobileWarning] = useState(null)
+  /* One non-blocking toast for everything the page needs to tell the user —
+     match cancelled, socket not ready yet, wrong screen size. These used to
+     be window.alert(), which freezes the whole tab behind an OS dialog the
+     user has to dismiss before they can do anything else. */
+  const [notice, setNotice] = useState(null)   // { text, tone }
+  const noticeTimerRef = useRef(null)
+
+  const dismissNotice = useCallback(() => {
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current)
+    setNotice(null)
+  }, [])
+
+  const showNotice = useCallback((text, tone = 'warn') => {
+    if (!text) return
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current)
+    setNotice({ text, tone })
+    noticeTimerRef.current = setTimeout(() => setNotice(null), 6000)
+  }, [])
+
+  useEffect(() => () => { if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current) }, [])
 
   const [showModal, setShowModal]   = useState(false)
   const [topic, setTopic]           = useState('Array')
@@ -328,7 +347,8 @@ export default function Home() {
     })
     socket.on('match_cancelled', ({ reason }) => {
       setPendingMatch(null); setWaitingAccept(false)
-      setSearching(false); setRoomId(null); alert(reason)
+      setSearching(false); setRoomId(null)
+      showNotice(reason || 'Match cancelled.')
     })
     socket.on('match_starting', ({ seconds }) => {
       // Both players already accepted by this point — drop the accept
@@ -353,8 +373,7 @@ export default function Home() {
   const requiresDesktopAndAuth = () => {
     if (!isAuthenticated) { navigate('/login'); return false }
     if (window.innerWidth < MIN_MATCH_WIDTH) {
-      setMobileWarning('Matches require a desktop or laptop screen (≥768px). Please switch devices to play.')
-      setTimeout(() => setMobileWarning(null), 5000)
+      showNotice('Matches need a desktop or laptop screen (at least 768px wide).')
       return false
     }
     return true
@@ -363,7 +382,7 @@ export default function Home() {
   const joinMatch = async () => {
     if (!requiresDesktopAndAuth()) return
     if (!socket.connected || !socket.id) {
-      alert('Still connecting to server — please wait a moment and try again.')
+      showNotice('Still connecting to the server — give it a second and try again.')
       return
     }
     try {
@@ -383,7 +402,7 @@ export default function Home() {
   const createRoom = async () => {
     if (!requiresDesktopAndAuth()) return
     if (!socket.connected || !socket.id) {
-      alert('Still connecting to server — please wait a moment and try again.')
+      showNotice('Still connecting to the server — give it a second and try again.')
       return
     }
     try {
@@ -402,7 +421,7 @@ export default function Home() {
   const joinRoom = async () => {
     if (!requiresDesktopAndAuth()) return
     if (!socket.connected || !socket.id) {
-      alert('Still connecting to server — please wait a moment and try again.')
+      showNotice('Still connecting to the server — give it a second and try again.')
       return
     }
     try {
@@ -513,6 +532,62 @@ export default function Home() {
         .home-panel {
           background: var(--home-panel);
           border: 1px solid var(--home-line);
+        }
+        /* Non-blocking notification, replacing what used to be window.alert().
+           Sits under the navbar, never traps focus, auto-dismisses. */
+        .home-toast {
+          position: fixed;
+          top: 4.5rem;
+          left: 50%;
+          z-index: 400;
+          display: flex;
+          align-items: center;
+          gap: 0.65rem;
+          max-width: min(28rem, calc(100vw - 2rem));
+          padding: 0.7rem 0.75rem 0.7rem 0.9rem;
+          border-radius: 8px;
+          font-size: 0.875rem;
+          line-height: 1.45;
+          color: var(--home-ink);
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.14);
+          transform: translate(-50%, 0);
+          animation: homeToastIn 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        @keyframes homeToastIn {
+          from { opacity: 0; transform: translate(-50%, -10px) scale(0.98); }
+          to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+        }
+        .home-toast-dot {
+          flex: none;
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+        }
+        .home-toast-text { flex: 1 1 auto; min-width: 0; }
+        .home-toast-close {
+          flex: none;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 22px;
+          height: 22px;
+          border-radius: 5px;
+          border: none;
+          background: transparent;
+          color: var(--home-muted);
+          cursor: pointer;
+          transition: color 0.15s ease, background 0.15s ease;
+        }
+        .home-toast-close:hover {
+          color: var(--home-ink);
+          background: var(--home-panel-2);
+        }
+        .home-toast-close:focus-visible {
+          outline: 2px solid var(--home-accent);
+          outline-offset: 2px;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .home-toast { animation: none; }
         }
         .home-btn {
           display: inline-flex;
@@ -1694,13 +1769,26 @@ export default function Home() {
         </div>
       </div>
 
-      {mobileWarning && (
+      {notice && (
         <div
-          className="fixed top-16 left-1/2 -translate-x-1/2 z-[400] home-panel px-4 py-3 text-sm max-w-sm text-center"
-          style={{ color: 'var(--home-warn)' }}
-          role="alert"
+          className="home-toast home-panel"
+          role="status"
+          aria-live="polite"
         >
-          {mobileWarning}
+          <span
+            className="home-toast-dot"
+            style={{ background: notice.tone === 'warn' ? 'var(--home-warn)' : 'var(--home-accent)' }}
+            aria-hidden="true"
+          />
+          <span className="home-toast-text">{notice.text}</span>
+          <button
+            type="button"
+            className="home-toast-close"
+            onClick={dismissNotice}
+            aria-label="Dismiss notification"
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 

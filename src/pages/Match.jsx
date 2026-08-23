@@ -285,8 +285,6 @@ export default function Match() {
   const oppTotalTests      = useMatchStore((s) => s.oppTotalTests)
   const oppSilhouette      = useMatchStore((s) => s.oppSilhouette)
   const timeLeft           = useMatchStore((s) => s.timeLeft)
-  const firstBlood         = useMatchStore((s) => s.firstBlood)
-  const firstBloodBy       = useMatchStore((s) => s.firstBloodBy)
   const userId             = useMatchStore((s) => s.currentUser?._id)
 
   const theme       = useThemeStore((s) => s.theme)
@@ -437,15 +435,20 @@ export default function Match() {
   }, [matchId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const lastTypingEmitRef = useRef(0)
+  /* True while a run/submit is in flight. The typing effect below would
+     otherwise downgrade a live "running tests" back to "coding"/"thinking"
+     mid-run and the opponent would never see the state. */
+  const testsInFlightRef = useRef(false)
   useEffect(() => {
     if (!matchId || !myCode) return
+    if (testsInFlightRef.current) return
     const now = Date.now()
     if (now - lastTypingEmitRef.current > 1500) {
       socket.emit("presence", { matchId, state: "coding" })
       lastTypingEmitRef.current = now
     }
     const idle = setTimeout(() => {
-      socket.emit("presence", { matchId, state: "thinking" })
+      if (!testsInFlightRef.current) socket.emit("presence", { matchId, state: "thinking" })
     }, 4000)
     return () => clearTimeout(idle)
   }, [myCode, matchId])
@@ -506,8 +509,15 @@ export default function Match() {
       setSubmitting(false)
       incrementSubmission()
       socket.emit("tc_update", { matchId, testsPassed: passed, totalTests: total })
+      // Tests finished — stop advertising "running tests" to the opponent.
+      testsInFlightRef.current = false
+      socket.emit("presence", { matchId, state: "thinking" })
     })
-    socket.on("run_result",         ({ results })                              => { setRunResults(results || []); setIsRunning(false) })
+    socket.on("run_result", ({ results }) => {
+      setRunResults(results || []); setIsRunning(false)
+      testsInFlightRef.current = false
+      socket.emit("presence", { matchId, state: "thinking" })
+    })
     socket.on("opponent_tc_update", ({ userId: sid, testsPassed, totalTests }) => { if (sid !== userId) setOppProgress({ testsPassed, totalTests }) })
     socket.on("opponent_tokens",    ({ tokens })                               => { setOppSilhouette(tokens) })
 
@@ -595,10 +605,16 @@ export default function Match() {
       setIsRunning(true); setRunResults([])
       const cases = (problem?.sampleTestCases || []).map((tc, i) => ({ id: tc.id || `tc${i+1}`, input: tc.input, expected: tc.output }))
       if (!cases.length) { setIsRunning(false); return }
+      testsInFlightRef.current = true
+      socket.emit("presence", { matchId, state: "running", section: "run" })
       await axios.post(`${import.meta.env.VITE_API_URL}/api/submit`,
         { language: myLanguage, code: myCode, testCases: cases, jobId: uuidv4(), matchId: null, userId },
         { withCredentials: true })
-    } catch { setIsRunning(false) }
+    } catch {
+      setIsRunning(false)
+      testsInFlightRef.current = false
+      socket.emit("presence", { matchId, state: "thinking" })
+    }
   }
 
   const submitCode = async () => {
@@ -606,10 +622,16 @@ export default function Match() {
       setSubmitting(true)
       const cases = (problem?.hiddenTestCases || []).map((tc, i) => ({ id: tc.id || `tc${i+1}`, input: tc.input, expected: tc.output }))
       if (!cases.length) { setSubmitting(false); return }
+      testsInFlightRef.current = true
+      socket.emit("presence", { matchId, state: "running", section: "submit" })
       await axios.post(`${import.meta.env.VITE_API_URL}/api/submit`,
         { language: myLanguage, code: myCode, testCases: cases, jobId: uuidv4(), matchId, userId },
         { withCredentials: true })
-    } catch { setSubmitting(false) }
+    } catch {
+      setSubmitting(false)
+      testsInFlightRef.current = false
+      socket.emit("presence", { matchId, state: "thinking" })
+    }
   }
 
   const formatTime = (s) => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`
@@ -661,21 +683,6 @@ export default function Match() {
           animation: "slide-down 0.25s ease forwards",
         }}>
           Back online
-        </div>
-      )}
-
-      {firstBlood && (
-        <div
-          style={{
-            position: "fixed", top: 0, left: 0, right: 0, zIndex: 500,
-            background: "var(--s1)", borderBottom: "1px solid var(--border)",
-            padding: "7px 0", textAlign: "center",
-            fontFamily: "var(--mono)", fontSize: 12, letterSpacing: "0.16em",
-            color: "var(--text-2)", textTransform: "uppercase",
-            animation: "slide-down 0.3s ease forwards",
-          }}
-        >
-          First blood — {firstBloodBy === "me" ? "you" : opponent?.username || "opponent"} passed TC1
         </div>
       )}
 

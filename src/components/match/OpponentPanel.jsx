@@ -16,6 +16,13 @@ function describePresence(presence) {
   if (!presence || !presence.online && presence.state === 'offline') {
     return { text: "OFFLINE",          color: "var(--danger)", tone: "offline" }
   }
+  if (presence.state === 'running') {
+    return {
+      text:  presence.section === 'submit' ? "SUBMITTING" : "RUNNING TESTS",
+      color: "var(--warn)",
+      tone:  "running",
+    }
+  }
   if (presence.state === 'coding') {
     return { text: "CODING",           color: "var(--accent)", tone: "coding" }
   }
@@ -50,13 +57,14 @@ export default function OpponentPanel({ opponent, oppSilhouette, oppTestsPassed,
     return () => clearInterval(id)
   }, [oppPresence?.lastEvent])
 
-  /* Local decay: if last event >10s ago and state was "coding", show
-     "THINKING" instead. Doesn't mutate state — just affects display. */
+  /* Local decay: a stale state shouldn't linger forever if the follow-up
+     event never arrives (dropped socket, crashed tab). "coding" falls back
+     after 10s; "running tests" gets longer, since a judged submission can
+     legitimately take a while. Doesn't mutate state — display only. */
   const effective = (() => {
     const p = oppPresence || { state: 'unknown', section: null, online: false }
-    if (p.online && p.state === 'coding' && ago > 10) {
-      return { ...p, state: 'thinking' }
-    }
+    if (p.online && p.state === 'coding'  && ago > 10) return { ...p, state: 'thinking' }
+    if (p.online && p.state === 'running' && ago > 30) return { ...p, state: 'thinking' }
     return p
   })()
   const label = describePresence(effective)
@@ -154,14 +162,16 @@ export default function OpponentPanel({ opponent, oppSilhouette, oppTestsPassed,
               <span style={{
                 width: 6, height: 6, borderRadius: "50%",
                 background: label.color,
-                animation: label.tone === 'thinking' ? "shimmer-block 1.8s ease-in-out infinite" : "none",
+                animation: label.tone === 'thinking' ? "shimmer-block 1.8s ease-in-out infinite"
+                         : label.tone === 'running'  ? "pulse-green 1s ease-in-out infinite"
+                         : "none",
               }} />
             )}
             <span style={{
               fontFamily: "var(--mono)", fontSize: 11, letterSpacing: "0.14em",
               color: label.color,
             }}>
-              {label.text}{label.tone === 'coding' || label.tone === 'thinking' ? '…' : ''}
+              {label.text}{['coding', 'thinking', 'running'].includes(label.tone) ? '…' : ''}
             </span>
             {effective.online && effective.lastEvent > 0 && (label.tone === 'reading' || label.tone === 'thinking') && (
               <span style={{
