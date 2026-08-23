@@ -14,6 +14,19 @@ function formatDuration(ms) {
   return m > 0 ? `${m}m ${s}s` : `${s}s`
 }
 
+/* Pick the opponent's entry out of a players payload keyed by userId.
+   The store's `opponent` is empty on a fresh load of this page (reload, or
+   after resetMatch cleared it), so relying on it alone left the opponent
+   column reading "Unknown" with no stats. Whichever id in the payload isn't
+   mine is the opponent — a match only ever has two players. */
+function pickOpponent(players, myId) {
+  if (!players) return null
+  const storedOppId = useMatchStore.getState().opponent?.userId
+  if (storedOppId && players[storedOppId]) return players[storedOppId]
+  const oppId = Object.keys(players).find((id) => id !== myId)
+  return oppId ? players[oppId] : null
+}
+
 const EVAL_MESSAGES = [
   "Evaluating your code…",
   "Running final test cases…",
@@ -166,8 +179,7 @@ export default function Result() {
       if (review) setAIReview(review)
       if (players) {
         const myId  = useMatchStore.getState().currentUser?._id
-        const oppId = useMatchStore.getState().opponent?.userId
-        applyFinalResult({ mine: myId ? players[myId] : null, opp: oppId ? players[oppId] : null })
+        applyFinalResult({ mine: myId ? players[myId] : null, opp: pickOpponent(players, myId) })
       }
     }
     socket.on("match_result", onMatchResult)
@@ -198,9 +210,8 @@ export default function Result() {
           if (result.aiReview?.reasoning) setAIReview(result.aiReview)
 
           const myId  = useMatchStore.getState().currentUser?._id
-          const oppId = useMatchStore.getState().opponent?.userId
-          const mine  = myId  ? result.players?.[myId]  : null
-          const opp   = oppId ? result.players?.[oppId] : null
+          const mine  = myId ? result.players?.[myId] : null
+          const opp   = pickOpponent(result.players, myId)
           applyFinalResult({ mine, opp })
         })
         .catch((err) => {
@@ -546,7 +557,7 @@ function PlayerCard({ player, label, color, testsPassed, totalTests, time, langu
       <div className="space-y-5">
         <Row label="Tests Passed">
           <span className="font-semibold" style={{ color }}>
-            {totalTests > 0 ? `${testsPassed}/${totalTests}` : "—"}
+            {totalTests > 0 ? `${testsPassed}/${totalTests}` : `${testsPassed}`}
           </span>
         </Row>
         {totalTests > 0 && (
