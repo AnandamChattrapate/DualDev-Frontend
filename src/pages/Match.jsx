@@ -404,6 +404,33 @@ export default function Match() {
     socket.emit("join_match", { matchId })
   }, [matchId])
 
+  /* Read every value straight off the store at call time. The 1s timer
+     effect below captures this callback once and keeps that reference for
+     the life of the match, so anything closed over here would be frozen at
+     its first-render value — which is how an expiring timer used to submit
+     the untouched starter template as the player's final code. */
+  const matchEndedRef = useRef(false)
+  const handleMatchEnd = useCallback(async () => {
+    if (matchEndedRef.current) return
+    matchEndedRef.current = true
+    setMatchEnded(true)
+
+    const s = useMatchStore.getState()
+    socket.emit("match_ended", {
+      matchId,
+      userId:          s.currentUser?._id ?? userId,
+      code:            s.codeByLanguage?.[s.myLanguage] ?? null,
+      language:        s.myLanguage,
+      testsPassed:     s.myTestsPassed,
+      submissionCount: s.submissionCount,
+      aiUsageCount:    s.aiUsageCount,
+    })
+    // Navigate immediately instead of sitting on a frozen match screen while
+    // the server judges the match — Result.jsx owns the "evaluating" state and
+    // picks up match_result itself, since this page unmounts right after.
+    navigate(`/result/${matchId}`)
+  }, [matchId, userId, navigate])
+
   useEffect(() => {
     if (!matchId || matchEnded) return
     const iv = setInterval(() => {
@@ -584,21 +611,6 @@ export default function Match() {
     ])
     setChatDraft("")
   }
-
-  const handleMatchEnd = useCallback(async () => {
-    if (matchEnded) return
-    setMatchEnded(true)
-    socket.emit("match_ended", {
-      matchId, userId, code: myCode, language: myLanguage,
-      testsPassed:     useMatchStore.getState().myTestsPassed,
-      submissionCount: useMatchStore.getState().submissionCount,
-      aiUsageCount:    useMatchStore.getState().aiUsageCount,
-    })
-    // Navigate immediately instead of sitting on a frozen match screen while
-    // the server judges the match — Result.jsx owns the "evaluating" state and
-    // picks up match_result itself, since this page unmounts right after.
-    navigate(`/result/${matchId}`)
-  }, [matchId, userId, myCode, myLanguage, matchEnded, navigate])
 
   const runCode = async () => {
     try {

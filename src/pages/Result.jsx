@@ -27,6 +27,15 @@ function pickOpponent(players, myId) {
   return oppId ? players[oppId] : null
 }
 
+/* Server-reported solve time, in whole seconds from match start to the
+   submission that passed everything. Null when they never went fully green. */
+function formatSeconds(secs) {
+  if (secs == null || secs < 0) return "—"
+  const m = Math.floor(secs / 60)
+  const r = secs % 60
+  return m > 0 ? `${m}m ${r}s` : `${r}s`
+}
+
 const EVAL_MESSAGES = [
   "Evaluating your code…",
   "Running final test cases…",
@@ -134,6 +143,8 @@ export default function Result() {
   const oppTotalTests   = useMatchStore((s) => s.oppTotalTests);
   const oppLanguage     = useMatchStore((s) => s.oppLanguage);
   const finalOppUsername = useMatchStore((s) => s.finalOppUsername);
+  const myTimeTaken     = useMatchStore((s) => s.myTimeTaken);
+  const oppTimeTaken    = useMatchStore((s) => s.oppTimeTaken);
   const finalMyCode     = useMatchStore((s) => s.finalMyCode);
   const finalMyLanguage = useMatchStore((s) => s.finalMyLanguage);
   const myRatingBefore  = useMatchStore((s) => s.myRatingBefore);
@@ -341,7 +352,7 @@ export default function Result() {
               color="var(--color-accent-green)"
               testsPassed={myTestsPassed}
               totalTests={myTotalTests}
-              time={formatDuration(matchDuration)}
+              time={myTimeTaken != null ? formatSeconds(myTimeTaken) : formatDuration(matchDuration)}
               language={myLanguage}
             />
 
@@ -379,7 +390,7 @@ export default function Result() {
               color="var(--color-accent-orange)"
               testsPassed={oppTestsPassed}
               totalTests={oppTotalTests}
-              time="—"
+              time={formatSeconds(oppTimeTaken)}
               language={oppLanguage}
             />
           </div>

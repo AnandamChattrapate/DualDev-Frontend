@@ -48,6 +48,8 @@ const useMatchStore = create(
       // `opponent` object below incompletely; this is always reliable once
       // match_result data lands.
       finalOppUsername: null,
+      myTimeTaken:      null,
+      oppTimeTaken:     null,
 
       problem: null,
 
@@ -65,6 +67,7 @@ const useMatchStore = create(
       isSubmitting:    false,
       submissionCount: 0,
       aiUsageCount:    0,
+      aiUsageLeft:     5,
       matchStartTime:  null,
 
       opponent:       null,
@@ -111,7 +114,7 @@ const useMatchStore = create(
           const res = await axios.get(`${BASE_URL}/api/auth/me`, { withCredentials: true })
           set({ authLoading: false, isAuthenticated: true, currentUser: res.data.payload, authError: null })
           return res.data
-        } catch (err) {
+        } catch {
           set({ authLoading: false, isAuthenticated: false, currentUser: null })
           return null
         }
@@ -153,6 +156,7 @@ const useMatchStore = create(
           isSubmitting:    false,
           submissionCount: 0,
           aiUsageCount:    0,
+          aiUsageLeft:     5,
           matchStartTime:  Date.now(),
           oppSilhouette:   '',
           oppTestsPassed:  0,
@@ -198,6 +202,16 @@ const useMatchStore = create(
       setSubmitting: (val) => set({ isSubmitting: val }),
 
       incrementSubmission: () => set((state) => ({ submissionCount: state.submissionCount + 1 })),
+
+      incrementAIUsage: () => {
+        const { aiUsageLeft } = get()
+        if (aiUsageLeft <= 0) return false
+        set((state) => ({
+          aiUsageCount: state.aiUsageCount + 1,
+          aiUsageLeft:  state.aiUsageLeft - 1,
+        }))
+        return true
+      },
 
       setMyVerdict: ({ verdict, results, testsPassed, totalTests }) => {
         const { firstBlood, myTestsPassed } = get()
@@ -256,6 +270,10 @@ const useMatchStore = create(
         finalMyLanguage: mine?.language     ?? state.myLanguage ?? null,
         myRatingBefore:  mine?.ratingBefore ?? state.myRatingBefore,
         myRatingAfter:   mine?.ratingAfter  ?? state.myRatingAfter,
+        // Seconds to a fully-green submission, per player. Null means they
+        // never passed everything, which the result page shows as a dash.
+        myTimeTaken:     mine?.timeTaken    ?? state.myTimeTaken,
+        oppTimeTaken:    opp?.timeTaken     ?? state.oppTimeTaken,
       })),
 
       setAIReview: (review) => set({ aiReview: review }),
@@ -274,6 +292,8 @@ const useMatchStore = create(
           finalMyCode:      null,
           finalMyLanguage:  null,
           finalOppUsername: null,
+          myTimeTaken:      null,
+          oppTimeTaken:     null,
           matchEndTime:    null,
           problem:         null,
           myLanguage:      'python',
@@ -289,6 +309,7 @@ const useMatchStore = create(
           isSubmitting:    false,
           submissionCount: 0,
           aiUsageCount:    0,
+          aiUsageLeft:     5,
           matchStartTime:  null,
           opponent:        null,
           oppSilhouette:   '',
@@ -331,12 +352,15 @@ const useMatchStore = create(
         oppTestsPassed:  state.oppTestsPassed,
         oppTotalTests:   state.oppTotalTests,
         oppLanguage:     state.oppLanguage,
+        aiUsageLeft:     state.aiUsageLeft,
         matchStartTime:  state.matchStartTime,
         myRatingBefore:  state.myRatingBefore,
         myRatingAfter:   state.myRatingAfter,
         finalMyCode:      state.finalMyCode,
         finalMyLanguage:  state.finalMyLanguage,
         finalOppUsername: state.finalOppUsername,
+        myTimeTaken:      state.myTimeTaken,
+        oppTimeTaken:     state.oppTimeTaken,
         matchEndTime:    state.matchEndTime,
       }),
     }
