@@ -198,10 +198,13 @@ export default function Result() {
     // Belt-and-suspenders REST fallback in case the socket event is missed
     // entirely (dropped connection, reload landing straight on this page).
     // The backend's match-end processing (settle delay + AI judge call) can
-    // take a few seconds, so poll a few times rather than trying once.
+    // take up to ~25s in the worst case (the judge model behind aicredits.in
+    // is a reasoning model, and its own timeout is 25s before it falls back
+    // to a heuristic) — poll well past that so this doesn't show "couldn't
+    // load" out from under a request that's still legitimately in flight.
     let cancelled = false
     let attempts = 0
-    const maxAttempts = 10
+    const maxAttempts = 20
     const pollMatch = () => {
       if (cancelled || useMatchStore.getState().winner != null) return
       attempts += 1
