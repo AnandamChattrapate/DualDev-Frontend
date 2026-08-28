@@ -73,6 +73,21 @@ async function fetchQuoteFeed(excludeIds = new Set()) {
   return QUOTE_FALLBACK.filter((p) => !excludeIds.has(String(p.id))).slice(0, QUOTE_BATCH)
 }
 
+/* socket.js opens the connection immediately at import time, but a fresh
+   page load (or a brief network drop) can leave it not-yet-connected for a
+   second or two. The join/create/find actions used to check socket.connected
+   at the instant of the click and dead-end with an error if it wasn't ready
+   yet — give it a short window to finish connecting first instead. */
+function waitForSocketReady(timeoutMs = 4000) {
+  return new Promise((resolve) => {
+    if (socket.connected && socket.id) { resolve(true); return }
+    const cleanup = () => { socket.off('connect', onConnect); clearTimeout(timer) }
+    const onConnect = () => { cleanup(); resolve(true) }
+    const timer = setTimeout(() => { cleanup(); resolve(false) }, timeoutMs)
+    socket.on('connect', onConnect)
+  })
+}
+
 function recordQuoteVote(phraseId, action) {
   if (!phraseId || String(phraseId).startsWith('fb-') || String(phraseId).startsWith('cold-')) return
   axios
@@ -159,6 +174,13 @@ export default function Home() {
   const [roomId, setRoomId]             = useState(null)
   const [friendRoomId, setFriendRoomId] = useState('')
   const [roomCopied, setRoomCopied]     = useState(false)
+
+  /* Busy flags for the three join/create actions — drives instant button
+     feedback ("Joining…") instead of dead air between the click and the
+     server responding. */
+  const [findingMatch, setFindingMatch] = useState(false)
+  const [creatingRoom, setCreatingRoom] = useState(false)
+  const [joiningRoom, setJoiningRoom]   = useState(false)
 
   const [pendingMatch, setPendingMatch]       = useState(null)
   const [acceptCountdown, setAcceptCountdown] = useState(30)
@@ -381,11 +403,13 @@ export default function Home() {
 
   const joinMatch = async () => {
     if (!requiresDesktopAndAuth()) return
-    if (!socket.connected || !socket.id) {
-      showNotice('Still connecting to the server — give it a second and try again.')
-      return
-    }
+    setFindingMatch(true)
     try {
+      const ready = await waitForSocketReady()
+      if (!ready) {
+        showNotice('Could not reach the server — check your connection and try again.')
+        return
+      }
       setSearching(true)
       setShowModal(false)
       await axios.post(
@@ -395,43 +419,56 @@ export default function Home() {
       )
     } catch (e) {
       console.error(e.response?.data || e.message)
+      showNotice(e.response?.data?.message || 'Could not start matchmaking — try again.')
       setSearching(false)
+    } finally {
+      setFindingMatch(false)
     }
   }
 
   const createRoom = async () => {
     if (!requiresDesktopAndAuth()) return
-    if (!socket.connected || !socket.id) {
-      showNotice('Still connecting to the server — give it a second and try again.')
-      return
-    }
+    setCreatingRoom(true)
     try {
-      setShowModal(false)
+      const ready = await waitForSocketReady()
+      if (!ready) {
+        showNotice('Could not reach the server — check your connection and try again.')
+        return
+      }
       const res = await axios.post(
         `${import.meta.env.VITE_API_URL}/api/matchmaking/create-room`,
         { socketId: socket.id, topic, difficulty },
         { withCredentials: true },
       )
+      setShowModal(false)
       setRoomId(res.data.roomId)
     } catch (e) {
       console.error(e.response?.data || e.message)
+      showNotice(e.response?.data?.message || 'Could not create a room — try again.')
+    } finally {
+      setCreatingRoom(false)
     }
   }
 
   const joinRoom = async () => {
     if (!requiresDesktopAndAuth()) return
-    if (!socket.connected || !socket.id) {
-      showNotice('Still connecting to the server — give it a second and try again.')
-      return
-    }
+    setJoiningRoom(true)
     try {
+      const ready = await waitForSocketReady()
+      if (!ready) {
+        showNotice('Could not reach the server — check your connection and try again.')
+        return
+      }
       await axios.post(
         `${import.meta.env.VITE_API_URL}/api/matchmaking/join-room`,
-        { socketId: socket.id, roomId: friendRoomId },
+        { socketId: socket.id, roomId: friendRoomId.trim() },
         { withCredentials: true },
       )
     } catch (e) {
       console.error(e.response?.data || e.message)
+      showNotice(e.response?.data?.message || 'Could not join that room — check the ID and try again.')
+    } finally {
+      setJoiningRoom(false)
     }
   }
 
@@ -1856,15 +1893,15 @@ export default function Home() {
                     placeholder="Paste room ID"
                     value={friendRoomId}
                     onChange={(e) => setFriendRoomId(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && friendRoomId && joinRoom()}
+                    onKeyDown={(e) => e.key === 'Enter' && friendRoomId && !joiningRoom && joinRoom()}
                   />
                   <button
                     type="button"
                     className="home-btn home-btn-secondary shrink-0"
                     onClick={joinRoom}
-                    disabled={!friendRoomId}
+                    disabled={!friendRoomId || joiningRoom}
                   >
-                    Join
+                    {joiningRoom ? 'Joining…' : 'Join'}
                   </button>
                 </div>
               </div>
@@ -2069,8 +2106,11 @@ export default function Home() {
                 type="button"
                 className="home-btn home-btn-primary flex-1"
                 onClick={mode === 'random' ? joinMatch : createRoom}
+                disabled={findingMatch || creatingRoom}
               >
-                {mode === 'random' ? 'Find match' : 'Create room'}
+                {mode === 'random'
+                  ? (findingMatch ? 'Finding match…' : 'Find match')
+                  : (creatingRoom ? 'Creating room…' : 'Create room')}
               </button>
               <button type="button" className="home-btn home-btn-secondary" onClick={() => setShowModal(false)}>
                 Cancel
