@@ -2,6 +2,7 @@
 import { useEffect } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom"
 import useMatchStore from './store/matchStore.js'
+import socket, { ensureSocket } from './socket/socket.js'
 
 import RootLayout from "./layouts/RootLayout"
 import Home from "./pages/Home"
@@ -16,13 +17,27 @@ import Login from "./components/auth/login"
 import useThemeStore from "./store/themeStore.js"
 
 function App() {
-  const checkAuth = useMatchStore((s) => s.checkAuth)
-  const theme     = useThemeStore((s) => s.theme)
+  const checkAuth       = useMatchStore((s) => s.checkAuth)
+  const isAuthenticated = useMatchStore((s) => s.isAuthenticated)
+  const theme           = useThemeStore((s) => s.theme)
 
   // Check auth on every page load/refresh
   useEffect(() => {
     checkAuth()
   }, [])
+
+  /* The socket authenticates from the login cookie in its handshake. On a
+     cold load that cookie may not exist yet (logged out, or checkAuth
+     still in flight), and a rejected handshake won't retry on its own.
+     Once auth is confirmed, (re)connect so matchmaking has a live socket;
+     drop it on logout so a stale authenticated socket doesn't linger. */
+  useEffect(() => {
+    if (isAuthenticated) {
+      ensureSocket()
+    } else if (socket.connected) {
+      socket.disconnect()
+    }
+  }, [isAuthenticated])
 
   // Apply the persisted theme to <html> as soon as the app mounts.
   useEffect(() => {

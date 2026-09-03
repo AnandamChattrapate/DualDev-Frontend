@@ -162,7 +162,12 @@ const useMatchStore = create(
           oppTestsPassed:  0,
           oppTotalTests:   problem?.hiddenTestCases?.length || 0,
           oppVerdict:      null,
-          oppPresence:     { state: 'unknown', section: null, lastEvent: 0, online: false },
+          // A match only starts once both players have accepted, so the
+          // opponent IS present here — start them "online / thinking"
+          // instead of "unknown", which the panel renders as a jarring
+          // "CONNECTING". A real opponent_offline (3s server grace) will
+          // correct this if they actually dropped.
+          oppPresence:     { state: 'thinking', section: null, lastEvent: 0, online: true },
           firstBlood:      false,
           firstBloodBy:    null,
           activeHints:     [],
@@ -316,6 +321,7 @@ const useMatchStore = create(
           oppTestsPassed:  0,
           oppTotalTests:   0,
           oppVerdict:      null,
+          oppPresence:     { state: 'unknown', section: null, lastEvent: 0, online: false },
           firstBlood:      false,
           firstBloodBy:    null,
           activeHints:     [],

@@ -73,18 +73,24 @@ async function fetchQuoteFeed(excludeIds = new Set()) {
   return QUOTE_FALLBACK.filter((p) => !excludeIds.has(String(p.id))).slice(0, QUOTE_BATCH)
 }
 
-/* socket.js opens the connection immediately at import time, but a fresh
-   page load (or a brief network drop) can leave it not-yet-connected for a
-   second or two. The join/create/find actions used to check socket.connected
-   at the instant of the click and dead-end with an error if it wasn't ready
-   yet — give it a short window to finish connecting first instead. */
-function waitForSocketReady(timeoutMs = 4000) {
+/* socket.js opens the connection at import time, but a fresh page load, a
+   brief network drop, or a handshake that raced ahead of the login cookie
+   can leave it disconnected. The join/create/find actions used to check
+   socket.connected at the instant of the click and dead-end with an error
+   if it wasn't ready — instead, actively kick the socket and give it a
+   window to finish connecting first. */
+function waitForSocketReady(timeoutMs = 7000) {
   return new Promise((resolve) => {
     if (socket.connected && socket.id) { resolve(true); return }
-    const cleanup = () => { socket.off('connect', onConnect); clearTimeout(timer) }
+    const cleanup = () => {
+      socket.off('connect', onConnect)
+      clearTimeout(timer)
+    }
     const onConnect = () => { cleanup(); resolve(true) }
     const timer = setTimeout(() => { cleanup(); resolve(false) }, timeoutMs)
     socket.on('connect', onConnect)
+    // A middleware-rejected socket won't retry on its own; nudge it.
+    if (!socket.connected) socket.connect()
   })
 }
 
@@ -464,6 +470,10 @@ export default function Home() {
         { socketId: socket.id, roomId: friendRoomId.trim() },
         { withCredentials: true },
       )
+      // The match itself arrives over the socket (match_found → accept
+      // dialog). Show the waiting state so the screen isn't dead in the
+      // gap; match_found / match_cancelled clear it.
+      setSearching(true)
     } catch (e) {
       console.error(e.response?.data || e.message)
       showNotice(e.response?.data?.message || 'Could not join that room — check the ID and try again.')
