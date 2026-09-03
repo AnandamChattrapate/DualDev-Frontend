@@ -1,5 +1,5 @@
 // App.jsx
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom"
 import useMatchStore from './store/matchStore.js'
 import socket, { ensureSocket } from './socket/socket.js'
@@ -44,7 +44,11 @@ function App() {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
 
-  const router = createBrowserRouter([
+  /* Build the router once. App re-renders whenever auth state changes (see
+     the socket effect above); recreating the router on those renders resets
+     RouterProvider to the current URL and swallows any in-flight navigate()
+     — which left users stranded on the login "welcome" screen. */
+  const router = useMemo(() => createBrowserRouter([
     {
       path: "/",
       element: <RootLayout />,
@@ -60,7 +64,7 @@ function App() {
         { path: "*",               element: <Navigate to="/" replace /> },
       ],
     },
-  ])
+  ]), [])
 
   return <RouterProvider router={router} />
 }
